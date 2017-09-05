@@ -11,8 +11,8 @@ def nr_step(f, theta):
     """
 
     theta = np.zeros(len(theta))
-    grad = nd.Gradient(f)[theta]
-    hess = nd.Hessian(f)[theta]
+    grad = nd.Gradient(f)(theta)
+    hess = nd.Hessian(f)(theta)
     newton_dir = -np.dot(np.linalg.inv(hess), grad)
     thetanew = theta + newton_dir
     alpha = .0001
