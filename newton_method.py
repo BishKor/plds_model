@@ -13,7 +13,8 @@ def nr_step(f, theta):
     theta = np.zeros(len(theta))
     grad = nd.Gradient(f)(theta)
     hess = nd.Hessian(f)(theta)
-    newton_dir = -np.dot(np.linalg.inv(hess), grad)
+    newton_dir = np.linalg.solve(hess, -grad)
+    # newton_dir = -np.dot(np.linalg.inv(hess), grad)
     thetanew = theta + newton_dir
     alpha = .0001
     fnew = f(thetanew)  # this can be optimized by saving this value as fold for the next step
