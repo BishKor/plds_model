@@ -1,5 +1,5 @@
 import numpy as np
-import numdifftools as nd
+import scipy.sparse as scsp
 
 
 def nr_step(f, df, H, x, fold):
@@ -13,11 +13,10 @@ def nr_step(f, df, H, x, fold):
     :return: xnew, fnew: updated version of x, f(xnew)
     """
 
-    newton_dir = np.linalg.solve(H, -df)
+    newton_dir = scsp.linalg.solve(H, -df)
     xnew = x + newton_dir
     alpha = .0001
     fnew = f(xnew)  # this can be optimized by saving this value as fold for the next step
-
 
     # First test
     test = fnew <= fold + alpha * np.dot(df, xnew - x)
