@@ -6,7 +6,7 @@ import numpy as np
 from newton_method import nr_algo
 
 
-def kd(i,j):
+def kd(i, j):
     if i == j:
         return 1.
     else:
@@ -33,10 +33,11 @@ def logposterior(y, C, d, A, B, q, q0, u, n_time_steps, n_neurons, n_stimuli_dim
         # first compute useful values
         q0inv = np.linalg.inv(q0)
         qinv = np.linalg.inv(q)
-        
-        constants = .5 * (n_time_steps-1) * np.log(np.abs(np.linalg.det(q))) + .5 * np.log(np.abs(np.linalg.det(q0)))
+
+        constants = .5 * (n_time_steps-1) * np.log(np.linalg.det(q)) + .5 * np.log(np.linalg.det(q0))
         term1 = sum(y[t*n_neurons:(t+1)*n_neurons].T @ (C @ x[t*nld:(t+1)*nld] + d) -
                     np.sum(np.exp(C @ x[t*nld:(t+1)*nld] + d)) for t in range(n_time_steps-1))
+
         term2 = - .5 * (x[1*nld:(1+1)*nld] - x[0*nld:(0+1)*nld]).T @ q0inv @ (x[1*nld:(1+1)*nld] - x[0*nld:(0+1)*nld])
 
         term3 = - .5 * sum((x[(t+1)*nld:(t+2)*nld] -
@@ -58,30 +59,11 @@ def logposteriorDerivative(y, C, d, A, B, q, q0, u, n_time_steps, n_neurons, n_s
         Q0inv = np.linalg.inv(q0)
         for t in range(1, n_time_steps):
             df[t*nld:(t+1)*nld] = sum((y[t*n_neurons:(t+1)*n_neurons][i] - np.exp(C[i]@x[t*nld:(t+1)*nld] + d[i]))*C[i] 
-             for i in range(n_neurons)) + A.T @ Qinv @ (x[t*nld:(t+1)*nld] - A @ x[t*nld:(t+1)*nld] - B @ u[t*n_stimuli_dims:(t+1)*n_stimuli_dims]) \
+             for i in range(n_neurons)) + A.T @ Qinv @ (x[t*nld:(t+1)*nld] - A @ x[t*nld:(t+1)*nld] -
+                                                        B @ u[t*n_stimuli_dims:(t+1)*n_stimuli_dims]) \
             - Qinv @ (x[t*nld:(t+1)*nld] - A @ x[(t-1)*nld:t*nld] - B @ u[(t-1)*n_stimuli_dims:t*n_stimuli_dims]) \
             - kd(t, 1) * (Q0inv @ (x[1*nld:(1+1)*nld] - x[0*nld:(0+1)*nld]))
         return df
-    return f
-
-
-def logposteriorHessian(y, C, d, A, B, q, q0, u, n_time_steps, n_neurons, nld):
-    def f(x):
-        h = np.zeros((n_time_steps*nld, n_time_steps*nld))
-        Qinv = np.linalg.inv(q)
-        Q0inv = np.linalg.inv(q0)
-        h[1*nld:(1+1)*nld, 1*nld:(1+1)*nld] += - Q0inv
-        
-        for t in range(1, n_time_steps-1):
-            h[t*nld:(t+1)*nld, t*nld:(t+1)*nld] += -sum(np.exp(C[i]*x[t*nld:(t+1)*nld] + d[i]) * np.outer(C[i], C[i].T) 
-                                          for i in range(n_neurons)) + A.T @ Qinv @ A - Qinv
-            h[t*nld:(t+1)*nld, (t+1)*nld:(t+2)*nld] += - A.T @ Qinv
-            h[t*nld:(t+1)*nld, (t-1)*nld:t*nld] += - Qinv @ A
-            
-        h[n_time_steps*nld:(n_time_steps+1)*nld, n_time_steps*nld:(n_time_steps+1)*nld] += \
-            -sum(np.exp(C[i]*x[n_time_steps*nld:(n_time_steps+1)*nld] + d[i]) * np.outer(C[i], C[i].T) for i in range(n_neurons))         + A.T @ Qinv @ A - Qinv
-        h[n_time_steps*nld:(n_time_steps+1)*nld, (n_time_steps-1)*nld:n_time_steps*nld] += - Qinv @ A
-        return h
     return f
 
 
@@ -89,27 +71,27 @@ def logposteriorhessianoptomized(y, C, d, A, B, q, q0, u, n_time_steps, n_neuron
     def f(x):
         Qinv = np.linalg.inv(q)
         Q0inv = np.linalg.inv(q0)
-        
+        ATQinvA = A.T @ Qinv @ A
+        ATQinv = - A.T @ Qinv
+        ATQinvAminusQinv = - ATQinvA - Qinv
+
         diag = []
         off_diag = []
-        diag.append(scsp.coo_matrix(-Q0inv))
-        ATQinvA = A.T @ Qinv @ A
-        ATQinv = A.T @ Qinv
-        QinvA = Qinv @ A
-        ATQinvAminusQinv = ATQinvA - Qinv
-        diag.append(- QinvA)
-        for t in range(0, n_time_steps-1):
-            
-            diag.append(scsp.coo_matrix(-sum(np.exp(C[i]*x[t*nld:(t+1)*nld] + d[i]) * np.outer(C[i], C[i].T) 
+        diag.append(scsp.lil_matrix(- ATQinvA - Q0inv))
+        for t in range(n_time_steps-2):
+            diag.append(scsp.lil_matrix(-sum(np.exp(C[i]*x[t*nld:(t+1)*nld] + d[i]) * np.outer(C[i], C[i].T)
                                           for i in range(n_neurons)) + ATQinvAminusQinv))
-            off_diag.append(scsp.coo_matrix(-ATQinv))
-        
-        diag.append(scsp.coo_matrix(np.zeros_like(diag[0])))
-        h = scsp.block_diag(diag)
-        od = scsp.block_diag(off_diag)
-        h[n_time_steps:, :] = diag[:n_time_steps, :]
-        h[:, n_time_steps:] = diag[:, :n_time_steps]
-        return h
+
+        diag.append(scsp.lil_matrix(-Qinv))
+
+        for t in range(0, n_time_steps):
+            off_diag.append(scsp.lil_matrix(.5 * ATQinv))
+
+        h = scsp.block_diag(diag).tolil()
+        od = scsp.block_diag(off_diag).tolil()
+        h[nld:, :] += od[:-nld, :]
+        h[:, nld:] += od.T[:, :-nld]
+        return h.tocsc()
     return f
 
 
@@ -121,14 +103,15 @@ def jointloglikelihood(y, n_stimuli_dims, n_neurons, n_time_steps, mu, cov, Q, Q
 
         for i in range(n_neurons+1):
             d[i] = dC[i*(nld+1)]
-            C[i] = dC[i*(nld+1) + 1:i*(nld+1)]
+            C[i] = dC[i*(nld+1) + 1:(i+1)*(nld+1)]
 
         # precompute for efficiency
         q0inv = np.linalg.inv(Q0)
         qinv = np.linalg.inv(Q)
 
-        jll = sum(y[t*n_neurons:(t+1)*n_neurons].T @ C @ mu[t*nld:(t+1)*nld]                    + y[t*n_neurons:(t+1)*n_neurons].T @ d                    - .5 * np.exp(C @ mu[t*nld:(t+1)*nld] +
-                                 .5 * C.T @ cov[t*n_neurons:(t+1)*n_neurons, t*n_neurons:(t+1)*n_neurons] @ C + d) \
+        jll = sum(y[t*n_neurons:(t+1)*n_neurons].T @ C @ mu[t*nld:(t+1)*nld] + y[t*n_neurons:(t+1)*n_neurons].T @ d \
+                  - .5 * np.exp(C @ mu[t*nld:(t+1)*nld] +
+                    .5 * C.T @ cov[t*n_neurons:(t+1)*n_neurons, t*n_neurons:(t+1)*n_neurons] @ C + d) \
                    - .5 * mu[nld:2*nld].T @ q0inv @ mu[nld:2*nld] \
                    + .5 * np.trace(q0inv @ cov[nld:2*nld, 1*nld:2*nld]) \
                    + .5 * mu[nld:2*nld].T @ q0inv @ x0 \
@@ -149,17 +132,15 @@ def jointloglikelihood(y, n_stimuli_dims, n_neurons, n_time_steps, mu, cov, Q, Q
                    - .5 * u[t*n_stimuli_dims:(t+1)*n_stimuli_dims].T @ B.T @ qinv @ A @ mu[(t+1)*nld:(t+2)*nld] \
                    - .5 * u[t*n_stimuli_dims:(t+1)*n_stimuli_dims].T @ B.T @ qinv @ B @ u[t*n_stimuli_dims:(t+1)*n_stimuli_dims] for t in range(n_time_steps-1)) \
               - .5 * np.log(np.abs(np.det(Q0))) - .5 * (n_time_steps-1) * np.log(np.abs(np.det(Q)))
-
         return jll
     return jointll
 
 
-def laplace_approximation(f, df, Hf, mu):
+def laplace_approximation(f, df, hf, x):
     # use NR algorithm to compute minimum of log-likelihood
-    mu = nr_algo(f, df, Hf, mu)
-
+    x = nr_algo(f, df, hf, x)
     # negative inverse of Hessian is covariance matrix
-    covariance = -scsp.linalg.inv(Hf(mu))
+    covariance = -scsp.linalg.inv(hf(x))
     return mu, covariance
 
 
@@ -186,41 +167,6 @@ def jllDerivative(n_neurons, nld, mu, cov, n_time_steps, y):
 
         djlldC = np.array([np.concatenate(djlld[i], djllC[i]) for i in range(n_neurons)])
         return djlldC
-    return f
-
-
-def jllHessian(n_neurons, nld, mu, cov, n_time_steps, y):
-    def f(dC):
-
-        d = np.empty(n_neurons)
-        C = np.empty((n_neurons, nld))
-
-        for i in range(n_neurons+1):
-            d[i] = dC[i*(nld+1)]
-            C[i] = dC[i*(nld+1) + 1:i*(nld+1)]
-
-        Hjll = np.zeros((n_neurons + n_neurons * nld, n_neurons + n_neurons * nld))
-        
-        
-        
-        for i in range(n_neurons):
-            Hjll[i * (nld + 1), i * (nld + 1)] = sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] +
-                                                    .5 * C[i] @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i])
-                                                    for t in range(n_time_steps))
-
-            Hjll[i * (nld + 1), i * (nld + 1) + 1:(i + 2) * (nld + 1)] =                 sum((mu[t] + cov[t, t] @ C[i]) * np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] +
-                    .5 * C[i] @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i]) for t in range(n_time_steps))
-
-            Hjll[i * (nld + 1) + 1:(i + 2) * (nld + 1), i * (nld + 1)] =                 Hjll[i * (nld + 1), i * (nld + 1) + 1:(i + 2) * (nld + 1)].T
-
-            Hjll[i * (nld + 1) + 1:(i + 2) * (nld + 1), i * (nld + 1) + 1:(i + 2) * (nld + 1)] = np.array([
-                sum(y[t][i] * cov[t, t] @ C[i] + mu[t] +
-                np.outer(mu[t] + cov[t, t] @ C[i], mu[t] + cov[t, t] @ C[i])[i] +
-                np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * C[i] @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i]) *
-                (u[t] + cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i])
-                for t in range(n_time_steps))
-                ])
-        return Hjll
     return f
 
 
@@ -259,7 +205,8 @@ def jllHessianOptimized(n_neurons, nld, mu, cov, n_time_steps, y):
 
 if __name__ == "__main__":
     # load data
-    n_time_steps = 26187
+    print('loading data')
+    n_time_steps = 100
     n_neurons = 300  # number of neurons
     nld = 5  # number of latent dimensions
     n_stimuli_dims = 4
@@ -271,18 +218,16 @@ if __name__ == "__main__":
     correct = data['correct'][0]
     orient = np.array(data['orient'][0], np.int)
     location = (data['location'][0]+1)//2
-
-    # create empty u
     u = np.zeros((n_time_steps, n_stimuli_dims))
-    # set stimuli
     for ot, rt, cor, ori, loc in zip(onset, resptime, correct, orient, location):
         # compute what u should be here
         u[ot:ot+int((rt+2.75+(4.85-2.75)*(1-cor))*frameHz)] = \
             np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)], np.int)
-
     u = u.flatten()
+
+    print('variable initialization')
     # Initialize parameters to random values
-    C = np.random.randn(n_neurons* nld).reshape(-1, nld)
+    C = np.random.randn(n_neurons * nld).reshape(-1, nld)
     d = np.random.randn(n_neurons)
     x0 = np.random.randn(nld)
     A = np.random.randn(nld * nld).reshape(-1, nld)
@@ -294,51 +239,58 @@ if __name__ == "__main__":
     mu = np.random.randn(nld*n_time_steps)
     cov = np.random.randn(nld * nld).reshape(-1, nld)
 
+    print('begin training')
     max_epochs = 1000
     for epoch in range(max_epochs):
+        print('epoch {}'.format(epoch))
+        print('performing laplace approximation')
         # perform laplace approximation on log-posterior with Newton-Raphson optimization to find mean and covariance
         mu, cov = laplace_approximation(logposterior(y, C, d, A, B, q, q0, u, n_time_steps, n_neurons, n_stimuli_dims),
                                         logposteriorDerivative(y, C, d, A, B, q, q0, u, n_time_steps, n_neurons, n_stimuli_dims, nld),
-                                        logposteriorHessian(y, C, d, A, B, q, q0, u, n_time_steps, n_neurons, nld),
+                                        logposteriorhessianoptomized(y, C, d, A, B, q, q0, u, n_time_steps, n_neurons, n_stimuli_dims, nld),
                                         mu)
+        print('laplace approximation complete')
 
+        print('assigning analytic expression')
         # Use analytic expressions to compute parameters x0, Q, Q0, A, B
         x0 = mu[0:nld]
         q0 = cov[0:nld, 0:nld]
 
-        A = sum(cov[(t+1)*nld, t] + np.outer(mu[(t+1)*nld], mu[t*nld].T) for t in range(n_time_steps - 1)) @ \
+        A = sum(cov[(t+1)*nld:(t+2)*nld, t*nld:(t+1)*nld] + np.outer(mu[(t+1)*nld:(t+2)*nld], mu[t*nld:(t+1)*nld].T) for t in range(n_time_steps - 1)) @ \
             np.linalg.inv(sum(cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] +
-            mu[t*nld] @ mu[t*nld].T for t in range(n_time_steps - 1)))
+            np.outer(mu[t*nld:(t+1)*nld], mu[t*nld:(t+1)*nld].T) for t in range(n_time_steps - 1)))
 
         q = sum(cov[(t + 1)*nld:(t + 2)*nld, (t + 1)*nld:(t + 2)*nld] +
-                np.outer(mu[(t + 1)*nld], mu[(t + 1)*nld].T) -
+                np.outer(mu[(t + 1)*nld:(t + 2)*nld], mu[(t + 1)*nld:(t + 2)*nld].T) -
                 (cov[(t + 1)*nld:(t + 2)*nld, t*nld:(t + 1)*nld] +
-                np.outer(mu[(t + 1)*nld], mu[t*nld])) @ A.T -
-                np.outer(mu[(t + 1)*nld], u[t*nld].T) @ B.T +
+                np.outer(mu[(t + 1)*nld:(t + 2)*nld], mu[t*nld:(t + 1)*nld])) @ A.T -
+                np.outer(mu[(t + 1)*nld:(t + 2)*nld], u[t*n_stimuli_dims:(t+1)*n_stimuli_dims].T) @ B.T +
                 A @ (cov[t*nld:(t + 1)*nld, (t + 1)*nld:(t + 2)*nld] +
-                mu[t*nld] @ mu[(t + 1)*nld].T) +
+                mu[t*nld:(t+1)*nld] @ mu[(t + 1)*nld:(t+2)*nld].T) +
                 A @ (cov[t*nld:(t + 1)*nld, t*nld:(t + 1)*nld] +
-                np.outer(mu[t*nld], mu[t*nld].T)) @ A.T +
-                A @ np.outer(mu[t*nld], u[t].T) @ B.T -
-                B @ np.outer(u[t], mu[t*nld].T) +
-                B @ np.outer(u[t], mu[t*nld].T) @ A.T +
-                B @ np.outer(u[t*nld], u[t]) @ B.T
+                np.outer(mu[t*nld:(t+1)*nld], mu[t*nld].T)) @ A.T +
+                A @ np.outer(mu[t*nld:(t+1)*nld], u[t*n_stimuli_dims:(t+1)*n_stimuli_dims].T) @ B.T -
+                B @ np.outer(u[t*n_stimuli_dims:(t+1)*n_stimuli_dims], mu[t*nld:(t+1)*nld].T) +
+                B @ np.outer(u[t*n_stimuli_dims:(t+1)*n_stimuli_dims], mu[t*nld:(t+1)*nld].T) @ A.T +
+                B @ np.outer(u[t*n_stimuli_dims:(t+1)*n_stimuli_dims], u[t*n_stimuli_dims:(t+1)*n_stimuli_dims]) @ B.T
                 for t in range(n_time_steps - 1))
 
         B = sum(np.outer(mu[(t+1)*nld], u[t*nld].T) - A @ np.outer(mu[t*nld], u[t*nld])
                 for t in n_time_steps-1) @ np.linalg.inv(sum(np.outer(u[t*nld], u[t*nld])for t in n_time_steps-1))
 
+        print('creating instance of joint log likelihood')
         # Create instance of joint log posterior with determined parameters
         jll = jointloglikelihood(y, n_stimuli_dims, n_neurons, n_time_steps, mu, cov, q, q0, x0, A, u, B)
 
         # Second NR minimization to compute C, d (and in principle, D)
 
+        print('performing NR algorithm for parameters C, d')
         # need to vectorize C for the purpose of gradient descent, thus making a vector (d[i], C[i]), i.e. hessian for
         # each neuron
         dC = np.array([np.concatenate(d[i], C[i]) for i in range(n_neurons)])
 
         dC = nr_algo(jll, jllDerivative(n_neurons, nld, mu, cov, n_time_steps, y),
-                     jllHessian(n_neurons, nld, mu, cov, n_time_steps, y), dC)
+                     jllHessianOptimized(n_neurons, nld, mu, cov, n_time_steps, y), dC)
 
         for i in range(n_neurons+1):
             d[i] = dC[i*(nld+1)]
