@@ -1,8 +1,10 @@
 import numpy as np
 import scipy.sparse.linalg as splin
+import sys
+import matplotlib.pyplot as plt
 
 
-def nr_step(f, df, H, x, fold):
+def nr_step(f, df, H, x, fold, alpha=.0001, tolx=.0001, stpmax=100):
     """
     Performs a single Newton-Raphson step
     :param f: incoming function, receives x as input
@@ -12,59 +14,63 @@ def nr_step(f, df, H, x, fold):
     :param fold: past iteration value of f
     :return: xnew, fnew: updated version of x, f(xnew)
     """
-    print('computing newton direction')
-    #newton_dir = splin.spsolve(H, -df)
-    newton_dir = np.linalg.solve(H, -df)
-    xnew = x + newton_dir
-    alpha = .0001
-    fnew = f(xnew)  # this can be optimized by saving this value as fold for the next step
-    # First test
-    test = fnew >= fold + alpha * np.dot(df, xnew - x)
-    if test:
-        return xnew, fnew
+    newton_dir = splin.spsolve(H, -df)
+    # newton_dir = np.linalg.solve(H, -df)
 
-    # Next test
-    gamma1 = 1
-    g0 = 1. * fold
-    gprime = np.dot(df, newton_dir)
-    g1 = 1. * fnew  # f(x + gamma1 * newton_dir)
+    if np.linalg.norm(newton_dir) > stpmax:
+        newton_dir = stpmax * newton_dir / np.linalg.norm(newton_dir)
 
-    gamma2 = - .5 * gprime / (g1 - g0 - gprime)
-    if gamma2 < .1:
-        gamma2 = .1
-    if gamma2 > 1:
-        gamma2 = .5
+    slope = df @ newton_dir
+    if slope > 0.0:
+        print('Roundoff problem in nr_step')
+        #sys.exit()
+    else:
+        print('no roundoff problem')
 
-    xnew = x + gamma2 * newton_dir
-    fnew = f(xnew)
-    test = fnew >= fold + alpha * df @ (xnew - x)
-    if test:
-        return xnew, fnew
+    test = 0.
+    for d in range(len(x)):
+        tmp = np.abs(newton_dir[d])/max(np.abs(x[d]), 1)
+        if tmp > test:
+            test = tmp
 
-    # Finally go to modeling g as cubic
-    while not test:
-        gl1 = f(x + gamma1 * newton_dir)
-        gl2 = f(x + gamma2 * newton_dir)
-        ab = (1 / (gamma1 - gamma2)) * np.dot(np.array([[1/gamma1**2, -1/gamma2**2], [-gamma2/gamma1**2, gamma1/gamma2**2]]),
-                                            np.array([gl1 - gprime*gamma1 - g0, gl2 - gprime*gamma2 - g0]))
+    alamin = tolx/test
 
-        gamma3 = (-ab[1] + np.sqrt(ab[1]**2 - 3*ab[0]*gprime))/(3 * ab[0])
+    lam = 1.0
 
-        if gamma3 < .1 * gamma1:
-            gamma3 = .1 * gamma1
-        if gamma3 > .5 * gamma1:
-            gamma3 = .5 * gamma1
-        xnew = x + gamma3 * newton_dir
+    while True:
+        xnew = x + lam * newton_dir
         fnew = f(xnew)
 
-        gamma1 = 1. * gamma2
-        gamma2 = 1. * gamma3
+        if lam < alamin:
+            return x, fold, True
+        elif fnew <= fold + alpha * lam * slope:
+            return xnew, fnew, False
+        else:
+            if lam == 1.0:
+                tmplam = - .5 * slope / (fnew - fold - slope)
+            else:
+                rhs1 = fnew - fold - lam * slope
+                rhs2 = f2 - fold - lam2 * slope
+                a = (rhs1/(lam*lam)-rhs2/(lam2*lam2))/(lam-lam2)
+                b = (-lam2*rhs1/(lam*lam) + lam*rhs2/(lam2*lam2))/(lam-lam2)
+                if a == 0.0:
+                    tmplam = -slope/(2.0*b)
+                else:
+                    disc = b*b-3.0*a*slope
+                    if disc < 0.0:
+                        tmplam = .5*lam
+                    elif b <= 0.0:
+                        tmplam = (-b + np.sqrt(disc))/(3.0 * a)
+                    else:
+                        tmplam = -slope/(b+np.sqrt(disc))
+                if tmplam > .5 * lam:
+                    tmplam = .5 * lam
+        lam2 = 1. * lam
+        f2 = 1. * fnew
+        lam = max(tmplam, .1*lam)
 
-        test = fnew <= fold + alpha * df @ (xnew - x)
-    print('returning updated locations')
-    return xnew, fnew
 
-def nr_algo(f, df, H, x, threshold=.0001):
+def nr_algo(f, df, h, x):
     """
     Performs the Newton-Raphson optimization method
     :param f: function to be optimized
@@ -74,28 +80,45 @@ def nr_algo(f, df, H, x, threshold=.0001):
     :param threshold: cutoff value, improvements smaller that this value are inconsequential
     :return: location of optimum
     """
-    print(x)
+
+    TOLMIN = 1e-12
     fold = f(x)
     cont = True
-    while cont:
-        x, fnew = nr_step(f, df(x), H(x), x, fold)
-        if fnew - fold < threshold:
+    iter = 0
+    while cont or iter > 200:
+        iter += 1
+        x, fnew, check = nr_step(f, df(x), h(x), x, fold)
+
+        # check for convergence on function values
+        # I'm not sure how this should be implemented
+
+        # check for grad of f zero , i.e., spurious convergence
+        if check:
+            test = np.max(np.abs(df(x)) * np.maximum(np.abs(x), 1)/max(f(x), 1))
+            check = test < TOLMIN
             cont = False
-        fold = 1. * fnew
-        print(x)
+        else:
+            fold = 1. * fnew
+
     return x
+
 
 if __name__ == "__main__":
     def testf(x):
-        w = np.array([2, 3])
-        return np.sum(-(x-w)**2)
+        return (1 - x[0])**2 + 10*(x[1] - x[0]**2)**2
 
     def testdf(x):
-        w = np.array([2, 3])
-        return np.array(-2*x+2*w)
+        return np.array([2*(1-x[0]) - 40*x[0]*(x[1]-x[0]**2), 20*(x[1] - x[0]**2)])
 
     def testhf(x):
-        return np.array([[-2, 0], [0, -2]])
+        return np.array([[-2-40*x[1] - 120*x[0]**2, -40*x[0]], [-40*x[0], 20]])
 
     y = np.random.randn(2)
+    print(y)
     y = nr_algo(testf, testdf, testhf, y)
+    print(y)
+    print((1, 1))
+    print(testf(y))
+    print(testf([1., 1.]))
+    print('rsquared = {}'.format(1-np.mean((y-np.ones(2))**2/np.ones(2)**2)))
+
