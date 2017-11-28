@@ -149,8 +149,6 @@ def jllDerivative(nn, nld, mu, cov, nts, y):
             djlldC[i*(nld+1)] = djlld[i]
             djlldC[i*(nld+1) + 1:(i+1)*(nld+1)] = djllC[i]
 
-        # plt.plot(djlldC)
-        # plt.show()
         return djlldC
     return f
 
@@ -179,7 +177,7 @@ def jllHessian(nn, nld, mu, cov, nts, y):
             blocks.append(scsp.lil_matrix(block))
 
         HJLL = scsp.block_diag(blocks)
-        return HJLL.csc()
+        return HJLL.tocsc()
     return f
 
 
@@ -190,12 +188,12 @@ def blockdiaginv(m, nb, bw):
     return minv
 
 
-def laplace_approximation(f, df, hf, x):
+def laplace_approximation(f, df, hf, x, nts, nld):
     # use NR algorithm to compute minimum of log-likelihood
     x = nr_algo(f, df, hf, x)
     # negative inverse of Hessian is covariance matrix
     # covariance = splin.inv(hf(x)).toarray()
-    covariance = blockdiaginv(hf(x).toarray())
+    covariance = blockdiaginv(hf(x).toarray(), nts, nld)
     return x, covariance
 
 
@@ -242,7 +240,7 @@ if __name__ == "__main__":
         mu, cov = laplace_approximation(logposterior(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd),
                                         logposteriorderivative(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld),
                                         logposteriorhessian(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld),
-                                        mu)
+                                        mu, nts, nld)
 
         print('assigning analytic expressions')
         # Use analytic expressions to compute parameters m0, Q, Q0, A, B
@@ -288,3 +286,5 @@ if __name__ == "__main__":
         for i in range(nn):
             d[i] = dC[i*(nld+1)]
             C[i] = dC[i*(nld+1) + 1:(i+1)*(nld+1)]
+
+
