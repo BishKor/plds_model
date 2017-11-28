@@ -1,7 +1,5 @@
 import numpy as np
 import scipy.sparse.linalg as splin
-import sys
-import matplotlib.pyplot as plt
 
 
 def nr_step(f, df, H, x, fold, alpha=.0001, tolx=.0001, stpmax=100):
