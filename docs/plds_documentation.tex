@@ -1,0 +1,156 @@
+%% LyX 2.1.4 created this file.  For more info, see http://www.lyx.org/.
+%% Do not edit unless you really know what you are doing.
+\documentclass[english]{article}
+\usepackage[T1]{fontenc}
+\usepackage[latin9]{inputenc}
+\usepackage{geometry}
+\geometry{verbose,tmargin=1in,bmargin=0.5in,lmargin=1in,rmargin=1in,headheight=1in,headsep=1in,footskip=1in}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{stackrel}
+\usepackage{babel}
+\begin{document}
+Within this document nn = number of neurons
+
+Negative Log-Posterior :
+\begin{eqnarray*}
+\mathcal{L}=logP\left(\bar{x}|y,\Theta\right) & = & +\frac{1}{2}log\left(\left|Q_{0}\right|\right)+\frac{\left(T-1\right)}{2}log\left(\left|Q\right|\right)-\stackrel[t=1]{T}{\sum}\left(y_{t}^{T}\left(Cx_{t}+d\right)-\stackrel[i=1]{nn}{\sum}exp\left[Cx_{t}+d\right]_{i}\right)\\
+ &  & +\frac{1}{2}\left(x_{1}-x_{0}\right)^{T}Q_{0}^{-1}\left(x_{1}-x_{0}\right)+\frac{1}{2}\stackrel[t=1]{T-1}{\sum}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)^{T}Q^{-1}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)
+\end{eqnarray*}
+
+
+Negative Log-Posterior Derivative:
+
+\[
+\frac{d\mathcal{L}}{dx_{1}}=Q_{0}^{-1}\left(x_{1}-x_{0}\right)+A^{T}Q^{-1}\left(x_{2}-Ax_{1}-Bu_{1}\right)
+\]
+
+
+\[
+\left.\frac{d\mathcal{L}}{dx_{t}}\right|_{1<t<T}=-C^{T}y_{t}+C^{T}exp\left[Cx_{t}+d\right]-A^{T}Q^{-1}x_{t+1}+A^{T}Q^{-1}Ax_{t}+A^{T}Q^{-1}Bu_{t}+Q^{-1}x_{t}-Q^{-1}Ax_{t-1}-Q^{-1}Bu_{t-1}
+\]
+
+
+\[
+\frac{d\mathcal{L}}{dx_{T}}=-C^{T}y_{T}+C^{T}exp\left[Cx_{T}+d\right]+Q^{-1}x_{T}-Q^{-1}Ax_{T-1}-Q^{-1}Bu_{T-1}
+\]
+
+
+Negative Log-Posterior Hessian:
+\[
+H_{1,1}=Q_{0}^{-1}-A^{T}Q^{-1}A
+\]
+
+
+\[
+\left.H_{t,t}\right|_{1<t<T}=\stackrel[i=1]{nn}{\sum}exp\left[C_{i}x_{t}+d_{i}\right]C_{i}C_{i}^{T}+A^{T}Q^{-1}A+Q^{-1}
+\]
+\[
+H_{T,T}^{T}=Q^{-1}+\stackrel[i=1]{nn}{\sum}exp\left[C_{i}x_{T}+d_{i}\right]C_{i}C_{i}^{T}
+\]
+\[
+\left.H_{t,t+1}\right|_{t<T}=-Q^{-1}A
+\]
+\[
+\left.H_{t+1,t}\right|_{t<T}=\left.H_{t,t+1}^{T}\right|_{t<T}=-A^{T}Q^{-1}
+\]
+
+
+Joint Log Likelihood (Note that for training, terms below the first
+line RHS are irrelevant:
+
+\begin{align*}
+J= & \stackrel[t=1]{T-1}{\sum}\left[-y_{t}^{T}C\mu_{t}-y_{t}^{T}d+\stackrel[i=1]{nn}{\sum}exp\left[C\mu_{t}+d+\frac{1}{2}diag\left(C^{T}\Sigma_{t,t}C\right)\right]_{i}\right.\\
+ & +\frac{1}{2}\biggl(\mu_{t+1}^{T}Q^{-1}\mu_{t+1}+Tr\left(Q^{-1}\Sigma_{t+1,t+1}\right)-\mu_{t+1}^{T}Q^{-1}A\mu_{t}-Tr\left(Q^{-1}A\Sigma_{t+1,t}\right)-\mu_{t+1}^{T}Q^{-1}Bu_{t}\\
+ & -\mu_{t}^{T}A^{T}Q^{-1}\mu_{t+1}-Tr\left(A^{T}Q^{-1}\Sigma_{t,t+1}\right)+\mu_{t}^{T}A^{T}Q^{-1}A\mu_{t}+Tr\left(A^{T}Q^{-1}A\Sigma_{t,t}\right)+\mu_{t}^{T}A^{T}Q^{-1}Bu_{t}\\
+ & -u_{t+1}^{T}B^{T}Q^{-1}\mu_{t+1}+u_{t+1}^{T}B^{T}Q^{-1}A\mu_{t}+u_{t+1}^{T}B^{T}Q^{-1}Bu_{t}\biggr)\Biggr]\\
+ & +\frac{1}{2}\left(log(\left|Q_{0}\right|)+\left(T-1\right)log(\left|Q\right|)+Tr(Q_{0}^{-1}\Sigma_{1,1})+(\mu_{1}-x_{0})^{T}Q_{0}^{-1}(\mu_{1}-x_{0})\right)
+\end{align*}
+
+
+Joint Log Likelihood dC Derivative:
+
+\[
+\frac{dJ}{dd_{i}}=\stackrel[t=1]{T-1}{\sum}\left(-y_{t,i}+exp(C_{i}\mu_{t}+d_{i}+\frac{1}{2}C_{i}^{T}\Sigma_{t,t}C_{i}))\right)
+\]
+\[
+\frac{dJ}{dC_{i}}=\stackrel[t=1]{T-1}{\sum}\left[-y_{t,i}\mu_{t}+exp\left[C_{i}\mu_{t}+d_{i}+\frac{1}{2}C_{i}^{T}\Sigma_{t,t}C_{i}\right](\mu_{t}+\Sigma_{t,t}C_{i})\right]
+\]
+
+
+Joint Log Likelihood dC Hessian:
+
+\[
+H_{d_{i},d_{i}}=\stackrel[t=1]{T-1}{\sum}exp\left[C_{i}\mu_{t}+d_{i}+\frac{1}{2}C_{i}^{T}\Sigma_{t,t}C_{i}\right]
+\]
+\[
+H_{d_{i},C_{i}}=\stackrel[t=1]{T-1}{\sum}exp\left[C_{i}\mu_{t}+d_{i}+\frac{1}{2}C_{i}\Sigma_{t,t}C_{i}\right](\mu_{t}+\Sigma_{t,t}C_{i})
+\]
+\[
+H_{C_{i},C_{i}}=\stackrel[t=1]{T-1}{\sum}exp\left[C_{i}\mu_{t}+d_{i}+\frac{1}{2}C_{i}\Sigma_{t,t}C_{i}\right]\left(\Sigma_{t,t}+(\mu_{t}+\Sigma_{t,t}C_{i})(\mu_{t}+\Sigma_{t,t}C_{i})^{T}\right)
+\]
+
+
+Variable Updates:
+
+\[
+A=\left(\stackrel[t=1]{T-1}{\sum}\left(\Sigma_{t+1,t}+\mu_{t+1}\mu_{t}^{T}-Bu_{t}\mu_{t}^{T}\right)\right)\left(\stackrel[t=1]{T-1}{\sum}\left(\Sigma_{t,t}+\mu_{t}\mu_{t}^{T}\right)\right)^{-1}
+\]
+\[
+B=\left(\stackrel[t=1]{T-1}{\sum}\mu_{t+1}u_{t}^{T}-A\mu_{t}u_{t}^{T}\right)\left(\stackrel[t=1]{T-1}{\sum}u_{t}u_{t}^{T}\right)^{-1}
+\]
+
+
+\begin{eqnarray*}
+Q & = & \frac{1}{T-1}\stackrel[t=1]{T-1}{\sum}\biggl[\Sigma_{t+1,t+1}+\mu_{t+1}\mu_{t+1}^{T}-(\Sigma_{t+1,t}+\mu_{t+1}\mu_{t}^{T})A^{T}-\mu_{t+1}u_{t}^{T}B^{T}-A(\Sigma_{t,t+1}+\mu_{t}\mu_{t+1}^{T})\\
+ &  & +A(\Sigma_{t,t}+\mu_{t}\mu_{t}^{T})A^{T}+A\mu_{t}u_{t}^{T}B^{T}-Bu_{t}\mu_{t+1}^{T}+Bu_{t}\mu_{t}^{T}A^{T}+Bu_{t}u_{t}^{T}B^{T})\biggr]
+\end{eqnarray*}
+
+
+Calculating A,B,Q:
+
+Considering only JLL terms with $Q$ (more conveniently $Q^{-1}$):
+\[
+\frac{\partial}{\partial Q^{-1}}\left(\frac{1-T}{2}ln\left(\left|Q^{-1}\right|\right)+\frac{1}{2}\text{\ensuremath{\mathbb{E}\left(\stackrel[t=1]{T-1}{\sum}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)^{T}Q^{-1}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)\right)}}\right)\stackrel{!}{=}0
+\]
+\[
+\frac{1-T}{2}Q+\frac{1}{2}\text{\ensuremath{\mathbb{E}\left(\stackrel[t=1]{T-1}{\sum}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)\left(x_{t+1}-Ax_{t}-Bu_{t}\right)^{T}\right)}}=0
+\]
+\begin{eqnarray*}
+Q & = & \frac{1}{T-1}\text{\ensuremath{\stackrel[t=1]{T-1}{\sum}\biggl(\mathbb{E}\left(x_{t+1}x_{t+1}^{T}\right)}-\text{\ensuremath{\mathbb{E}}}\ensuremath{\left(x_{t+1}x_{t}^{T}\right)A^{T}}-\text{\ensuremath{\mathbb{E}}}\ensuremath{\left(x_{t+1}u_{t}^{T}\right)B^{T}}}\\
+ &  & -A\text{\ensuremath{\mathbb{E}}}\left(x_{t}x_{t+1}^{T}\right)+A\text{\ensuremath{\mathbb{E}}}\left(x_{t}x_{t}^{T}\right)A^{T}+A\text{\ensuremath{\mathbb{E}}}\left(x_{t}u_{t}^{T}\right)B^{T}\\
+ &  & -B\text{\ensuremath{\mathbb{E}}}\left(u_{t}x_{t+1}^{T}\right)+B\text{\ensuremath{\mathbb{E}}}\left(u_{t}x_{t}^{T}\right)A^{T}+B\text{\ensuremath{\mathbb{E}}}\left(u_{t}u_{t}^{T}\right)B^{T}\biggr)
+\end{eqnarray*}
+
+
+which yields the expression for Q above.
+\begin{eqnarray*}
+\frac{\partial}{\partial A_{ij}}\left(\frac{1}{2}\text{\ensuremath{\mathbb{E}\left(\stackrel[t=1]{T-1}{\sum}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)^{T}Q^{-1}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)\right)}}\right) & \overset{!}{=} & 0
+\end{eqnarray*}
+
+
+let $v=x_{t+1}-Ax_{t}-Bu_{t}$,
+\begin{eqnarray*}
+\frac{\partial v_{k}}{\partial A_{ij}}\frac{\partial}{\partial v_{k}}\left(\text{\ensuremath{\frac{1}{2}\mathbb{E}\left(\stackrel[t=1]{T-1}{\sum}v^{T}Q^{-1}v\right)}}\right) & = & \text{\ensuremath{\mathbb{E}\left(\stackrel[t=1]{T-1}{\sum}Q^{-1}vx_{t}^{T}\right)}}
+\end{eqnarray*}
+
+
+so that
+
+\begin{eqnarray*}
+Q^{-1}\mathbb{E}\left(\stackrel[t=1]{T-1}{\sum}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)x_{t}^{T}\right) & = & \text{\ensuremath{0}}\\
+\ensuremath{\stackrel[t=1]{T-1}{\sum}\mathbb{E}\left(x_{t+1}x_{t}^{T}\right)-A\stackrel[t=1]{T-1}{\sum}\mathbb{E}\left(x_{t}x_{t}^{T}\right)-B\stackrel[t=1]{T-1}{\sum}\mathbb{E}\left(u_{t}x_{t}^{T}\right)} & = & 0
+\end{eqnarray*}
+
+
+\[
+A=\left(\stackrel[t=1]{T-1}{\sum}\mathbb{E}\left(x_{t}x_{t}^{T}\right)\right)^{-1}\left(\stackrel[t=1]{T-1}{\sum}\left(\mathbb{E}\left(x_{t+1}x_{t}^{T}\right)-B\mathbb{E}\left(u_{t}x_{t}^{T}\right)\right)\right)
+\]
+
+
+similarly for B:
+\[
+B=\left(\stackrel[t=1]{T-1}{\sum}\mathbb{E}\left(u_{t}u_{t}^{T}\right)\right)^{-1}\left(\stackrel[t=1]{T-1}{\sum}\left(\mathbb{E}\left(x_{t+1}u_{t}^{T}\right)-A\mathbb{E}\left(x_{t}u_{t}^{T}\right)\right)\right)
+\]
+
+\end{document}

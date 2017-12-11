@@ -1,0 +1,399 @@
+#LyX 2.1 created this file. For more info see http://www.lyx.org/
+\lyxformat 474
+\begin_document
+\begin_header
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_math auto
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry true
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\leftmargin 1in
+\topmargin 1in
+\rightmargin 1in
+\bottommargin 0.5in
+\headheight 1in
+\headsep 1in
+\footskip 1in
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+Within this document nn = number of neurons
+\end_layout
+
+\begin_layout Standard
+Negative Log-Posterior :
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L}=logP\left(\bar{x}|y,\Theta\right) & = & +\frac{1}{2}log\left(\left|Q_{0}\right|\right)+\frac{\left(T-1\right)}{2}log\left(\left|Q\right|\right)-\stackrel[t=1]{T}{\sum}\left(y_{t}^{T}\left(Cx_{t}+d\right)-\stackrel[i=1]{nn}{\sum}exp\left[Cx_{t}+d\right]_{i}\right)\\
+ &  & +\frac{1}{2}\left(x_{1}-m_{0}\right)^{T}Q_{0}^{-1}\left(x_{1}-m_{0}\right)+\frac{1}{2}\stackrel[t=1]{T-1}{\sum}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)^{T}Q^{-1}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Negative Log-Posterior Derivative:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+\frac{d\mathcal{L}}{dx_{1}}=-C^{T}y_{1}+C^{T}\exp\left[Cx_{1}+d\right]+Q_{0}^{-1}\left(x_{1}-m_{0}\right)-A^{T}Q^{-1}\left(x_{2}-Ax_{1}-Bu_{1}\right)
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+\left.\frac{d\mathcal{L}}{dx_{t}}\right|_{1<t<T}=-C^{T}y_{t}+C^{T}\exp\left[Cx_{t}+d\right]-A^{T}Q^{-1}x_{t+1}+A^{T}Q^{-1}Ax_{t}+A^{T}Q^{-1}Bu_{t}+Q^{-1}x_{t}-Q^{-1}Ax_{t-1}-Q^{-1}Bu_{t-1}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+\frac{d\mathcal{L}}{dx_{T}}=-C^{T}y_{T}+C^{T}\exp\left[Cx_{T}+d\right]+Q^{-1}x_{T}-Q^{-1}Ax_{T-1}-Q^{-1}Bu_{T-1}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Negative Log-Posterior Hessian:
+\begin_inset Formula 
+\[
+H_{1,1}=Q_{0}^{-1}+A^{T}Q^{-1}A+\stackrel[i=1]{nn}{\sum}exp\left[C_{i}x_{1}+d_{i}\right]C_{i}C_{i}^{T}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+\left.H_{t,t}\right|_{1<t<T}=\stackrel[i=1]{nn}{\sum}exp\left[C_{i}x_{t}+d_{i}\right]C_{i}C_{i}^{T}+A^{T}Q^{-1}A+Q^{-1}
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+H_{T,T}^{T}=Q^{-1}+\stackrel[i=1]{nn}{\sum}exp\left[C_{i}x_{T}+d_{i}\right]C_{i}C_{i}^{T}
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+\left.H_{t,t+1}\right|_{t<T}=-Q^{-1}A
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+\left.H_{t+1,t}\right|_{t<T}=\left.H_{t,t+1}^{T}\right|_{t<T}=-A^{T}Q^{-1}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Joint Log Likelihood (Note that for training, terms below the first line
+ RHS are irrelevant:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{align*}
+J= & \stackrel[t=1]{T-1}{\sum}\left[-y_{t}^{T}C\mu_{t}-y_{t}^{T}d+\stackrel[i=1]{nn}{\sum}exp\left[C\mu_{t}+d+\frac{1}{2}diag\left(C^{T}\Sigma_{t,t}C\right)\right]_{i}\right.\\
+ & +\frac{1}{2}\biggl(\mu_{t+1}^{T}Q^{-1}\mu_{t+1}+Tr\left(Q^{-1}\Sigma_{t+1,t+1}\right)-\mu_{t+1}^{T}Q^{-1}A\mu_{t}-Tr\left(Q^{-1}A\Sigma_{t+1,t}\right)-\mu_{t+1}^{T}Q^{-1}Bu_{t}\\
+ & -\mu_{t}^{T}A^{T}Q^{-1}\mu_{t+1}-Tr\left(A^{T}Q^{-1}\Sigma_{t,t+1}\right)+\mu_{t}^{T}A^{T}Q^{-1}A\mu_{t}+Tr\left(A^{T}Q^{-1}A\Sigma_{t,t}\right)+\mu_{t}^{T}A^{T}Q^{-1}Bu_{t}\\
+ & -u_{t+1}^{T}B^{T}Q^{-1}\mu_{t+1}+u_{t+1}^{T}B^{T}Q^{-1}A\mu_{t}+u_{t+1}^{T}B^{T}Q^{-1}Bu_{t}\biggr)\Biggr]\\
+ & +\frac{1}{2}\left(log(\left|Q_{0}\right|)+\left(T-1\right)log(\left|Q\right|)+Tr(Q_{0}^{-1}\Sigma_{1,1})+(\mu_{1}-x_{0})^{T}Q_{0}^{-1}(\mu_{1}-x_{0})\right)
+\end{align*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Joint Log Likelihood dC Derivative:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+\frac{dJ}{dd_{i}}=\stackrel[t=1]{T-1}{\sum}\left(-y_{t,i}+exp(C_{i}\mu_{t}+d_{i}+\frac{1}{2}C_{i}^{T}\Sigma_{t,t}C_{i}))\right)
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+\frac{dJ}{dC_{i}}=\stackrel[t=1]{T-1}{\sum}\left[-y_{t,i}\mu_{t}+exp\left[C_{i}\mu_{t}+d_{i}+\frac{1}{2}C_{i}^{T}\Sigma_{t,t}C_{i}\right](\mu_{t}+\Sigma_{t,t}C_{i})\right]
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Joint Log Likelihood dC Hessian:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+H_{d_{i},d_{i}}=\stackrel[t=1]{T-1}{\sum}exp\left[C_{i}\mu_{t}+d_{i}+\frac{1}{2}C_{i}^{T}\Sigma_{t,t}C_{i}\right]
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+H_{d_{i},C_{i}}=\stackrel[t=1]{T-1}{\sum}exp\left[C_{i}\mu_{t}+d_{i}+\frac{1}{2}C_{i}\Sigma_{t,t}C_{i}\right](\mu_{t}+\Sigma_{t,t}C_{i})
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+H_{C_{i},C_{i}}=\stackrel[t=1]{T-1}{\sum}exp\left[C_{i}\mu_{t}+d_{i}+\frac{1}{2}C_{i}\Sigma_{t,t}C_{i}\right]\left(\Sigma_{t,t}+(\mu_{t}+\Sigma_{t,t}C_{i})(\mu_{t}+\Sigma_{t,t}C_{i})^{T}\right)
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Variable Updates:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+A=\left(\stackrel[t=1]{T-1}{\sum}\left(\Sigma_{t+1,t}+\mu_{t+1}\mu_{t}^{T}-Bu_{t}\mu_{t}^{T}\right)\right)\left(\stackrel[t=1]{T-1}{\sum}\left(\Sigma_{t,t}+\mu_{t}\mu_{t}^{T}\right)\right)^{-1}
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+B=\left(\stackrel[t=1]{T-1}{\sum}\mu_{t+1}u_{t}^{T}-A\mu_{t}u_{t}^{T}\right)\left(\stackrel[t=1]{T-1}{\sum}u_{t}u_{t}^{T}\right)^{-1}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+Q & = & \frac{1}{T-1}\stackrel[t=1]{T-1}{\sum}\biggl[\Sigma_{t+1,t+1}+\mu_{t+1}\mu_{t+1}^{T}-(\Sigma_{t+1,t}+\mu_{t+1}\mu_{t}^{T})A^{T}-\mu_{t+1}u_{t}^{T}B^{T}-A(\Sigma_{t,t+1}+\mu_{t}\mu_{t+1}^{T})\\
+ &  & +A(\Sigma_{t,t}+\mu_{t}\mu_{t}^{T})A^{T}+A\mu_{t}u_{t}^{T}B^{T}-Bu_{t}\mu_{t+1}^{T}+Bu_{t}\mu_{t}^{T}A^{T}+Bu_{t}u_{t}^{T}B^{T})\biggr]
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Calculating A,B,Q:
+\end_layout
+
+\begin_layout Standard
+Considering only JLL terms with 
+\begin_inset Formula $Q$
+\end_inset
+
+ (more conveniently 
+\begin_inset Formula $Q^{-1}$
+\end_inset
+
+):
+\begin_inset Formula 
+\[
+\frac{\partial}{\partial Q^{-1}}\left(\frac{1-T}{2}ln\left(\left|Q^{-1}\right|\right)+\frac{1}{2}\text{𝔼\left(\stackrel[t=1]{T-1}{\sum}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)^{T}Q^{-1}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)\right)}\right)\stackrel{!}{=}0
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+\frac{1-T}{2}Q+\frac{1}{2}\text{𝔼\left(\stackrel[t=1]{T-1}{\sum}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)\left(x_{t+1}-Ax_{t}-Bu_{t}\right)^{T}\right)}=0
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\begin{eqnarray*}
+Q & = & \frac{1}{T-1}\text{\stackrel[t=1]{T-1}{\sum}\biggl(𝔼\left(x_{t+1}x_{t+1}^{T}\right)-\text{𝔼}\left(x_{t+1}x_{t}^{T}\right)A^{T}-\text{𝔼}\left(x_{t+1}u_{t}^{T}\right)B^{T}}\\
+ &  & -A\text{𝔼}\left(x_{t}x_{t+1}^{T}\right)+A\text{𝔼}\left(x_{t}x_{t}^{T}\right)A^{T}+A\text{𝔼}\left(x_{t}u_{t}^{T}\right)B^{T}\\
+ &  & -B\text{𝔼}\left(u_{t}x_{t+1}^{T}\right)+B\text{𝔼}\left(u_{t}x_{t}^{T}\right)A^{T}+B\text{𝔼}\left(u_{t}u_{t}^{T}\right)B^{T}\biggr)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+which yields the expression for Q above.
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{\partial}{\partial A_{ij}}\left(\frac{1}{2}\text{\ensuremath{\mathbb{E}\left(\stackrel[t=1]{T-1}{\sum}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)^{T}Q^{-1}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)\right)}}\right) & \overset{!}{=} & 0
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+let 
+\begin_inset Formula $v=x_{t+1}-Ax_{t}-Bu_{t}$
+\end_inset
+
+,
+\begin_inset Formula 
+\begin{eqnarray*}
+\frac{\partial v_{k}}{\partial A_{ij}}\frac{\partial}{\partial v_{k}}\left(\text{\ensuremath{\frac{1}{2}\mathbb{E}\left(\stackrel[t=1]{T-1}{\sum}v^{T}Q^{-1}v\right)}}\right) & = & \text{\ensuremath{\mathbb{E}\left(\stackrel[t=1]{T-1}{\sum}Q^{-1}vx_{t}^{T}\right)}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+so that
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+Q^{-1}\mathbb{E}\left(\stackrel[t=1]{T-1}{\sum}\left(x_{t+1}-Ax_{t}-Bu_{t}\right)x_{t}^{T}\right) & = & \text{\ensuremath{0}}\\
+\ensuremath{\stackrel[t=1]{T-1}{\sum}\mathbb{E}\left(x_{t+1}x_{t}^{T}\right)-A\stackrel[t=1]{T-1}{\sum}\mathbb{E}\left(x_{t}x_{t}^{T}\right)-B\stackrel[t=1]{T-1}{\sum}\mathbb{E}\left(u_{t}x_{t}^{T}\right)} & = & 0
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+A=\left(\stackrel[t=1]{T-1}{\sum}\mathbb{E}\left(x_{t}x_{t}^{T}\right)\right)^{-1}\left(\stackrel[t=1]{T-1}{\sum}\left(\mathbb{E}\left(x_{t+1}x_{t}^{T}\right)-B\mathbb{E}\left(u_{t}x_{t}^{T}\right)\right)\right)
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+similarly for B:
+\begin_inset Formula 
+\[
+B=\left(\stackrel[t=1]{T-1}{\sum}\mathbb{E}\left(u_{t}u_{t}^{T}\right)\right)^{-1}\left(\stackrel[t=1]{T-1}{\sum}\left(\mathbb{E}\left(x_{t+1}u_{t}^{T}\right)-A\mathbb{E}\left(x_{t}u_{t}^{T}\right)\right)\right)
+\]
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document
