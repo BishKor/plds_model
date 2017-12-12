@@ -201,6 +201,9 @@ def laplace_approximation(f, df, hf, x, nts, nld):
     return x, covariance
 
 
+def rsquared(A, B):
+    return 1 - np.mean((A-B)**2/B**2)
+
 def runmodel(y, u, nts, nn, nld, nsd):
 
     print('variable initialization')
@@ -213,8 +216,18 @@ def runmodel(y, u, nts, nn, nld, nsd):
     q0 = q0 @ q0.T
     q = np.random.rand(nld, nld)
     q = q @ q.T
-    B = np.random.rand(nld, nsd)
+    B = np.zeros(nld, nsd)
     mu = np.random.rand(nld*nts)
+
+    # Create rsquared arrays
+    xrsq = [rsquared(mu, xgen)]
+    Crsq = [rsquared(C, Cgen)]
+    drsq = [rsquared(d, dgen)]
+    m0rsq = [rsquared(m0, m0gen)]
+    Arsq = [rsquared(A, Agen)]
+    q0rsq = [rsquared(q0, q0gen)]
+    qrsq = [rsquared(q, qgen)]
+    mursq = [rsquared(mu, mugen)]
 
     print('begin training')
     max_epochs = 5
@@ -311,6 +324,13 @@ if __name__ == "__main__":
     y = np.load('../testmats/ygen.npy')
     u = np.zeros(nts * nsd)
     xgen = np.load('../testmats/xgen.npy')
+    Cgen = np.load('../testmats/Agen.npy')
+    dgen = np.load('../testmats/Agen.npy')
+    q0gen = np.load('../testmats/Agen.npy')
+    qgen = np.load('../testmats/Agen.npy')
+    m0gen = np.load('../testmats/Agen.npy')
+    Agen = np.load('../testmats/Agen.npy')
+    Agen = np.load('../testmats/Agen.npy')
 
     d, C, A, B, q, q0, m0, mu = runmodel(y, u, nts, nn, nld, nsd)
     np.save("../testmats/mu_inf.npy", mu)
