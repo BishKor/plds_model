@@ -98,8 +98,8 @@ def logposteriorhessian(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld):
         for t in range(1, nts-1):
             diag.append(scsp.lil_matrix(sum(np.exp(C[i] @ x[t*nld:(t+1)*nld] + d[i]) * np.outer(C[i], C[i].T)
                                           for i in range(nn)) + ATQinvAplusQinv))
-        diag.append(scsp.lil_matrix(Qinv + sum(np.exp(C[i] @ x[-nld:] + d[i]) * np.outer(C[i], C[i].T)
-                                          for i in range(nn))))
+        diag.append(scsp.lil_matrix(sum(np.exp(C[i] @ x[-nld:] + d[i]) * np.outer(C[i], C[i].T)
+                                          for i in range(nn)) + Qinv))
 
         for t in range(0, nts-1):
             off_diag.append(scsp.lil_matrix(-ATQinv))
@@ -121,8 +121,8 @@ def jointloglikelihood(y, nsd, nn, nts, mu, cov, Q, Q0, m0, A, u, B):
 
         jll = sum(-y[t*nn:(t+1)*nn] @ C @ mu[t*nld:(t+1)*nld] - y[t*nn:(t+1)*nn] @ d \
                   + sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + .5 * (C[i] @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i]) +
-                        d[i]) for i in range(nn))
-                  for t in range(nts-1))
+                    d[i]) for i in range(nn))
+                    for t in range(nts-1))
         return jll
     return f
 
@@ -181,42 +181,51 @@ def jllHessian(nn, nld, mu, cov, nts, y):
 
 
 def blocktridiaginv(h, bw, nb):
-    factor = chol.cholesky(h, ordering_method="natural")
-    U = factor.L()
-    S = np.zeros_like(h.toarray())
-    S[-bw:,-bw:] = np.linalg.inv(U[-bw:,-bw:].T @ U[-bw:,-bw:])
-    for t in np.arange(nb-2, -1, -1):
-        S[t*bw:(t+1)*bw, (t+1)*bw:(t+2)*bw] = -np.linalg.inv(U[t*bw:(t+1)*bw, t*bw:(t+1)*bw]) @ U[t*bw:(t+1)*bw, (t+1)*bw:(t+2)*bw] @ S[(t+1)*bw:(t+2)*bw, (t+1)*bw:(t+2)*bw]
-        S[t*bw:(t+1)*bw, t*bw:(t+1)*bw] = np.linalg.inv(U[t*bw:(t+1)*bw, t*bw:(t+1)*bw].T @ U[t*bw:(t+1)*bw, t*bw:(t+1)*bw]) \
-                                          - S[t*bw:(t+1)*bw, (t+1)*bw:(t+2)*bw] @ (np.linalg.inv(U[t*bw:(t+1)*bw, t*bw:(t+1)*bw]) @ U[t*bw:(t+1)*bw, t*bw:(t+1)*bw]).T
-        S[(t+1)*bw:(t+2)*bw, t*bw:(t+1)*bw] = S[t*bw:(t+1)*bw, (t+1)*bw:(t+2)*bw].T
-    return S
-
+    # factor = chol.cholesky(h, beta=.000001, ordering_method="natural")
+    # U = factor.L().toarray().T
+    # S = np.zeros_like(h.toarray())
+    # S[-bw:,-bw:] = np.linalg.inv(U[-bw:,-bw:].T @ U[-bw:,-bw:])
+    # for t in np.arange(nb-2, -1, -1):
+    #     S[t*bw:(t+1)*bw, (t+1)*bw:(t+2)*bw] = -np.linalg.inv(U[t*bw:(t+1)*bw, t*bw:(t+1)*bw]) @ U[t*bw:(t+1)*bw, (t+1)*bw:(t+2)*bw] @ S[(t+1)*bw:(t+2)*bw, (t+1)*bw:(t+2)*bw]
+    #     S[t*bw:(t+1)*bw, t*bw:(t+1)*bw] = np.linalg.inv(U[t*bw:(t+1)*bw, t*bw:(t+1)*bw].T @ U[t*bw:(t+1)*bw, t*bw:(t+1)*bw]) \
+    #                                       - S[t*bw:(t+1)*bw, (t+1)*bw:(t+2)*bw] @ (np.linalg.inv(U[t*bw:(t+1)*bw, t*bw:(t+1)*bw]) @ U[t*bw:(t+1)*bw, t*bw:(t+1)*bw]).T
+    #     S[(t+1)*bw:(t+2)*bw, t*bw:(t+1)*bw] = S[t*bw:(t+1)*bw, (t+1)*bw:(t+2)*bw].T
+    # return S
+    return chol.cholesky(h).inv().toarray()
 
 def laplace_approximation(f, df, hf, x, nts, nld):
     # use NR algorithm to compute minimum of log-likelihood
     x = nr_algo(f, df, hf, x)
-    # negative inverse of Hessian is covariance matrix
+    # inverse of Hessian is covariance matrix
     covariance = blocktridiaginv(hf(x), nld, nts)
     return x, covariance
 
 
 def rsquared(A, B):
-    return 1 - np.mean((A-B)**2/B**2)
+    return np.mean((A-B)**2)
+    rsq = 0
+    for eA, eB in zip(B.flatten(), A.flatten()):
+        if eB == 0:
+            pass
+            # rsq += (eA-eB)**2/1
+        else:
+            rsq += (eA-eB)**2/eB**2
+    return 1 - rsq/len(B.flatten())
 
-def runmodel(y, u, nts, nn, nld, nsd):
+def runmodel(y, u, nts, nn, nld, nsd,  xgen, Cgen, dgen, q0gen, qgen, m0gen, Agen):
 
     print('variable initialization')
     # Initialize parameters to random values
-    C = np.random.rand(nn, nld)
-    d = np.random.rand(nn)
+    C = np.random.rand(nn, nld) * 0.
+    d = np.random.rand(nn) * 0.
     m0 = np.random.rand(nld)
     A = np.random.rand(nld, nld)
+    A = np.zeros_like(A)
     q0 = np.random.rand(nld, nld)
     q0 = q0 @ q0.T
     q = np.random.rand(nld, nld)
     q = q @ q.T
-    B = np.zeros(nld, nsd)
+    B = np.zeros((nld, nsd))
     mu = np.random.rand(nld*nts)
 
     # Create rsquared arrays
@@ -227,10 +236,9 @@ def runmodel(y, u, nts, nn, nld, nsd):
     Arsq = [rsquared(A, Agen)]
     q0rsq = [rsquared(q0, q0gen)]
     qrsq = [rsquared(q, qgen)]
-    mursq = [rsquared(mu, mugen)]
 
     print('begin training')
-    max_epochs = 5
+    max_epochs = 20
     for epoch in range(max_epochs):
         print('epoch {}'.format(epoch))
         print('performing laplace approximation')
@@ -246,25 +254,21 @@ def runmodel(y, u, nts, nn, nld, nsd):
         q0 = cov[:nld, :nld]
 
         A = sum(cov[(t+1)*nld:(t+2)*nld, t*nld:(t+1)*nld] + np.outer(mu[(t+1)*nld:(t+2)*nld], mu[t*nld:(t+1)*nld].T) -
-                B @ np.outer(u[t*nsd:(t+1)*nsd], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)) @ \
-                np.linalg.inv(sum(cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] +
-                np.outer(mu[t*nld:(t+1)*nld], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)))
+            B @ np.outer(u[t*nsd:(t+1)*nsd], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)) @ \
+            np.linalg.inv(sum(cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] +
+            np.outer(mu[t*nld:(t+1)*nld], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)))
 
         # B = sum(np.outer(mu[(t+1)*nld:(t+2)*nld], u[t*nsd:(t+1)*nsd]) - A @ np.outer(mu[t*nld:(t+1)*nld], u[t*nsd:(t+1)*nsd])
         #         for t in range(nts-1)) @ np.linalg.inv(sum(np.outer(u[t*nsd:(t+1)*nsd], u[t*nsd:(t+1)*nsd].T) for t in range(nts-1)))
 
-        q = (1/(nts-1))*sum(
-            cov[(t+1)*nld:(t+2)*nld, (t+1)*nld:(t+2)*nld] \
-            + np.outer(mu[(t+1)*nld:(t+2)*nld], mu[(t+1)*nld:(t+2)*nld].T)
-            - (cov[(t+1)*nld:(t+2)*nld, t*nld:(t+1)*nld] + np.outer(mu[(t+1)*nld:(t+2)*nld], mu[t*nld:(t+1)*nld].T)) @ A.T
-            - np.outer(mu[(t+1)*nld:(t+2)*nld], u[t*nsd:(t+1)*nsd].T) @ B.T
-            - A @ (cov[t*nld:(t+1)*nld, (t+1)*nld:(t+2)*nld] + np.outer(mu[t*nld:(t+1)*nld], mu[(t+1)*nld:(t+2)*nld].T))
-            + A @ (cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] + np.outer(mu[t*nld:(t+1)*nld], mu[t*nld:(t+1)*nld].T)) @ A.T
-            + A @ np.outer(mu[t*nld:(t+1)*nld], u[t*nsd:(t+1)*nsd].T) @ B.T
-            - B @ np.outer(u[t*nsd:(t+1)*nsd], mu[(t+1)*nld:(t+2)*nld].T)
-            + B @ np.outer(u[t*nsd:(t+1)*nsd], mu[t*nld:(t+1)*nld].T) @ A.T
-            + B @ np.outer(u[t*nsd:(t+1)*nsd], u[t*nsd:(t+1)*nsd].T) @ B.T
-            for t in range(nts-1))
+
+        q = (1/(nts-1))*sum(np.outer((mu[(t+1)*nld:(t+2)*nld] - A @ mu[t*nld:(t+1)*nld]-B@u[t*nsd:(t+1)*nsd]),
+                            (mu[(t+1)*nld:(t+2)*nld] - A @ mu[t*nld:(t+1)*nld]-B@u[t*nsd:(t+1)*nsd]).T) +
+                            cov[(t+1)*nld:(t+2)*nld, (t+1)*nld:(t+2)*nld] -
+                            A @ cov[t*nld:(t+1)*nld, (t+1)*nld:(t+2)*nld] -
+                            cov[(t+1)*nld:(t+2)*nld, t*nld:(t+1)*nld] @ A.T +
+                            A @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ A.T
+                            for t in range(nts-1))
 
         # Second NR minimization to compute C, d (and in principle, D)
         print('performing NR algorithm for parameters C, d')
@@ -285,13 +289,21 @@ def runmodel(y, u, nts, nn, nld, nsd):
             d[i] = dC[i*(nld+1)]
             C[i] = dC[i*(nld+1) + 1:(i+1)*(nld+1)]
 
-        np.save("../outputs/d_inf.npy", d)
-        np.save("../outputs/C_inf.npy", C)
-        np.save("../outputs/A_inf.npy", A)
-        np.save("../outputs/B_inf.npy", B)
-        np.save("../outputs/q_inf.npy", q)
-        np.save("../outputs/q0_inf.npy", q0)
-        np.save("../outputs/m0_inf.npy", m0)
+        xrsq.append(rsquared(mu, xgen))
+        Crsq.append(rsquared(C, Cgen))
+        drsq.append(rsquared(d, dgen))
+        m0rsq.append(rsquared(m0, m0gen))
+        Arsq.append(rsquared(A, Agen))
+        q0rsq.append(rsquared(q0, q0gen))
+        qrsq.append(rsquared(q, qgen))
+
+    np.save("../testmats/xrsq.npy", xrsq)
+    np.save("../testmats/Crsq.npy", Crsq)
+    np.save("../testmats/drsq.npy", drsq)
+    np.save("../testmats/morsq.npy", m0rsq)
+    np.save("../testmats/Arsq.npy", Arsq)
+    np.save("../testmats/q0rsq.npy", q0rsq)
+    np.save("../testmats/qrsq.npy", qrsq)
 
     return d, C, A, B, q, q0, m0, mu
 
@@ -324,20 +336,19 @@ if __name__ == "__main__":
     y = np.load('../testmats/ygen.npy')
     u = np.zeros(nts * nsd)
     xgen = np.load('../testmats/xgen.npy')
-    Cgen = np.load('../testmats/Agen.npy')
-    dgen = np.load('../testmats/Agen.npy')
-    q0gen = np.load('../testmats/Agen.npy')
-    qgen = np.load('../testmats/Agen.npy')
-    m0gen = np.load('../testmats/Agen.npy')
-    Agen = np.load('../testmats/Agen.npy')
+    Cgen = np.load('../testmats/Cgen.npy')
+    dgen = np.load('../testmats/dgen.npy')
+    q0gen = np.load('../testmats/q0gen.npy')
+    qgen = np.load('../testmats/qgen.npy')
+    m0gen = np.load('../testmats/m0gen.npy')
     Agen = np.load('../testmats/Agen.npy')
 
-    d, C, A, B, q, q0, m0, mu = runmodel(y, u, nts, nn, nld, nsd)
-    np.save("../testmats/mu_inf.npy", mu)
-    np.save("../testmats/d_inf.npy", d)
-    np.save("../testmats/C_inf.npy", C)
-    np.save("../testmats/A_inf.npy", A)
-    np.save("../testmats/B_inf.npy", B)
-    np.save("../testmats/q_inf.npy", q)
-    np.save("../testmats/q0_inf.npy", q0)
-    np.save("../testmats/m0_inf.npy", m0)
+    d, C, A, B, q, q0, m0, mu = runmodel(y, u, nts, nn, nld, nsd, xgen, Cgen, dgen, q0gen, qgen, m0gen, Agen)
+    np.save("../testmats/xinf.npy", mu)
+    np.save("../testmats/dinf.npy", d)
+    np.save("../testmats/Cinf.npy", C)
+    np.save("../testmats/Ainf.npy", A)
+    np.save("../testmats/Binf.npy", B)
+    np.save("../testmats/qinf.npy", q)
+    np.save("../testmats/q0inf.npy", q0)
+    np.save("../testmats/m0inf.npy", m0)

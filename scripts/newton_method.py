@@ -2,7 +2,7 @@ import numpy as np
 import scipy.sparse.linalg as splin
 
 
-def nr_step(f, df, H, x, fold, alpha=.0001, tolx=.0001, stpmax=100):
+def nr_step(f, df, H, x, fold, alpha=.0001, tolx=.0001, stpmax=1000):
     """
     Performs a single Newton-Raphson step
     :param f: incoming function, receives x as input
@@ -19,9 +19,9 @@ def nr_step(f, df, H, x, fold, alpha=.0001, tolx=.0001, stpmax=100):
         newton_dir = stpmax * newton_dir / np.linalg.norm(newton_dir)
 
     slope = df @ newton_dir
-    if slope > 0.0:
-        print('Roundoff problem in nr_step')
-        #sys.exit()
+    # if slope > 0.0:
+    #     print('Roundoff problem in nr_step')
+    #     sys.exit()
 
     test = 0.
     for d in range(len(x)):
@@ -76,18 +76,15 @@ def nr_algo(f, df, h, x):
     :param threshold: cutoff value, improvements smaller that this value are inconsequential
     :return: location of optimum
     """
-
     TOLMIN = 1e-12
     fold = f(x)
     cont = True
     iter = 0
-    while cont or iter > 200:
+    while cont:
         iter += 1
         x, fnew, check = nr_step(f, df(x), h(x), x, fold)
-
         # check for convergence on function values
         # I'm not sure how this should be implemented
-
         # check for grad of f zero , i.e., spurious convergence
         if check:
             test = np.max(np.abs(df(x)) * np.maximum(np.abs(x), 1)/max(f(x), 1))
@@ -95,7 +92,6 @@ def nr_algo(f, df, h, x):
             cont = False
         else:
             fold = 1. * fnew
-
     return x
 
 
@@ -109,12 +105,12 @@ if __name__ == "__main__":
     def testhf(x):
         return np.array([[-2-40*x[1] - 120*x[0]**2, -40*x[0]], [-40*x[0], 20]])
 
-    y = np.random.randn(2)
-    print(y)
+    y = np.array([1, 1])
+    print("initial guess = ", y)
     y = nr_algo(testf, testdf, testhf, y)
-    print(y)
-    print((1, 1))
-    print(testf(y))
-    print(testf([1., 1.]))
+    print("final estimate = ", y)
+    print("target optimum = (1, 1)")
+    print("value at inferred optimum = ", testf(y))
+    print("value at target optimum = ", testf([1., 1.]))
     print('rsquared = {}'.format(1-np.mean((y-np.ones(2))**2/np.ones(2)**2)))
 
