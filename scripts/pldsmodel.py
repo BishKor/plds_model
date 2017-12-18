@@ -5,7 +5,9 @@ import scipy.sparse as scsp
 import numpy as np
 from newton_method import nr_algo
 import sksparse.cholmod as chol
+from scipy.optimize import minimize
 # import matplotlib.pyplot as plt
+import scipy
 
 
 def kd(i, j):
@@ -110,7 +112,7 @@ def logposteriorhessian(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld):
         h[:-nld, nld:] += od
         h[nld:, :-nld] += od.T
 
-        return h.tocsc()
+        return h.toarray() #tocsc()
     return f
 
 
@@ -176,7 +178,7 @@ def jllHessian(nn, nld, mu, cov, nts, y):
             blocks.append(scsp.lil_matrix(block))
 
         HJLL = scsp.block_diag(blocks)
-        return HJLL.tocsc()
+        return HJLL.toarray() #tocsc()
     return f
 
 
@@ -191,14 +193,16 @@ def blocktridiaginv(h, bw, nb):
     #                                       - S[t*bw:(t+1)*bw, (t+1)*bw:(t+2)*bw] @ (np.linalg.inv(U[t*bw:(t+1)*bw, t*bw:(t+1)*bw]) @ U[t*bw:(t+1)*bw, t*bw:(t+1)*bw]).T
     #     S[(t+1)*bw:(t+2)*bw, t*bw:(t+1)*bw] = S[t*bw:(t+1)*bw, (t+1)*bw:(t+2)*bw].T
     # return S
-    return chol.cholesky(h).inv().toarray()
+    return chol.cholesky(scipy.sparse.csc_matrix(h)).inv().toarray()
 
 def laplace_approximation(f, df, hf, x, nts, nld):
     # use NR algorithm to compute minimum of log-likelihood
-    x = nr_algo(f, df, hf, x)
+    # x = nr_algo(f, df, hf, x)
     # inverse of Hessian is covariance matrix
-    covariance = blocktridiaginv(hf(x), nld, nts)
-    return x, covariance
+    # covariance = blocktridiaginv(hf(x), nld, nts)
+    res = minimize(f, x, jac=df, hess=hf, method="Newton-CG")
+    covariance = blocktridiaginv(hf(res.x), nld, nts)
+    return res.x, covariance
 
 
 def rsquared(A, B):
@@ -212,6 +216,7 @@ def rsquared(A, B):
             rsq += (eA-eB)**2/eB**2
     return 1 - rsq/len(B.flatten())
 
+
 def runmodel(y, u, nts, nn, nld, nsd,  xgen, Cgen, dgen, q0gen, qgen, m0gen, Agen):
 
     print('variable initialization')
@@ -219,12 +224,13 @@ def runmodel(y, u, nts, nn, nld, nsd,  xgen, Cgen, dgen, q0gen, qgen, m0gen, Age
     C = np.random.rand(nn, nld) * 0.
     d = np.random.rand(nn) * 0.
     m0 = np.random.rand(nld)
-    A = np.random.rand(nld, nld)
-    A = np.zeros_like(A)
-    q0 = np.random.rand(nld, nld)
-    q0 = q0 @ q0.T
-    q = np.random.rand(nld, nld)
-    q = q @ q.T
+    A = np.random.rand(nld, nld) * 0.
+    # q0 = np.random.rand(nld, nld)
+    # q0 = q0 @ q0.T
+    q0 = np.identity(nld)
+    # q = np.random.rand(nld, nld)
+    # q = q @ q.T
+    q = np.identity(nld)
     B = np.zeros((nld, nsd))
     mu = np.random.rand(nld*nts)
 
@@ -238,7 +244,7 @@ def runmodel(y, u, nts, nn, nld, nsd,  xgen, Cgen, dgen, q0gen, qgen, m0gen, Age
     qrsq = [rsquared(q, qgen)]
 
     print('begin training')
-    max_epochs = 20
+    max_epochs = 500
     for epoch in range(max_epochs):
         print('epoch {}'.format(epoch))
         print('performing laplace approximation')
@@ -280,10 +286,17 @@ def runmodel(y, u, nts, nn, nld, nsd,  xgen, Cgen, dgen, q0gen, qgen, m0gen, Age
             dC += list(C[i])
         dC = np.array(dC)
 
-        dC = nr_algo(jointloglikelihood(y, nsd, nn, nts, mu, cov, q, q0, m0, A, u, B),
-                     jllDerivative(nn, nld, mu, cov, nts, y),
-                     jllHessian(nn, nld, mu, cov, nts, y),
-                     dC)
+        # dC = nr_algo(jointloglikelihood(y, nsd, nn, nts, mu, cov, q, q0, m0, A, u, B),
+        #              jllDerivative(nn, nld, mu, cov, nts, y),
+        #              jllHessian(nn, nld, mu, cov, nts, y),
+        #              dC)
+
+        dC = minimize(jointloglikelihood(y, nsd, nn, nts, mu, cov, q, q0, m0, A, u, B),
+                      dC,
+                      jac=jllDerivative(nn, nld, mu, cov, nts, y),
+                      hess=jllHessian(nn, nld, mu, cov, nts, y),
+                      method='Newton-CG').x
+
 
         for i in range(nn):
             d[i] = dC[i*(nld+1)]
@@ -302,8 +315,8 @@ def runmodel(y, u, nts, nn, nld, nsd,  xgen, Cgen, dgen, q0gen, qgen, m0gen, Age
     np.save("../testmats/drsq.npy", drsq)
     np.save("../testmats/morsq.npy", m0rsq)
     np.save("../testmats/Arsq.npy", Arsq)
-    np.save("../testmats/q0rsq.npy", q0rsq)
-    np.save("../testmats/qrsq.npy", qrsq)
+    np.save("../testmats/Q0rsq.npy", q0rsq)
+    np.save("../testmats/Qrsq.npy", qrsq)
 
     return d, C, A, B, q, q0, m0, mu
 
@@ -328,7 +341,7 @@ if __name__ == "__main__":
     #     u[int(ot):ot+int((rt+2.75+(4.85-2.75)*(1-cor))*frameHz)] = np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)], np.int)
     # u = u.flatten()
 
-    nts = 100
+    nts = 1000
     nn = 3
     nld = 2
     nsd = 4
@@ -338,8 +351,8 @@ if __name__ == "__main__":
     xgen = np.load('../testmats/xgen.npy')
     Cgen = np.load('../testmats/Cgen.npy')
     dgen = np.load('../testmats/dgen.npy')
-    q0gen = np.load('../testmats/q0gen.npy')
-    qgen = np.load('../testmats/qgen.npy')
+    q0gen = np.load('../testmats/Q0gen.npy')
+    qgen = np.load('../testmats/Qgen.npy')
     m0gen = np.load('../testmats/m0gen.npy')
     Agen = np.load('../testmats/Agen.npy')
 
@@ -349,6 +362,7 @@ if __name__ == "__main__":
     np.save("../testmats/Cinf.npy", C)
     np.save("../testmats/Ainf.npy", A)
     np.save("../testmats/Binf.npy", B)
-    np.save("../testmats/qinf.npy", q)
-    np.save("../testmats/q0inf.npy", q0)
+    np.save("../testmats/Qinf.npy", q)
+    np.save("../testmats/Q0inf.npy", q0)
     np.save("../testmats/m0inf.npy", m0)
+    print('complete')
