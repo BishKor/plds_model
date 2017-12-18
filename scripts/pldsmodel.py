@@ -8,7 +8,7 @@ import sksparse.cholmod as chol
 from scipy.optimize import minimize
 # import matplotlib.pyplot as plt
 import scipy
-
+from cholesky import computecov
 
 def kd(i, j):
     if i == j:
@@ -201,7 +201,8 @@ def laplace_approximation(f, df, hf, x, nts, nld):
     # inverse of Hessian is covariance matrix
     # covariance = blocktridiaginv(hf(x), nld, nts)
     res = minimize(f, x, jac=df, hess=hf, method="Newton-CG")
-    covariance = blocktridiaginv(hf(res.x), nld, nts)
+    # covariance = blocktridiaginv(hf(res.x), nld, nts)
+    covariance = computecov(hf(res.x), nld, nts)
     return res.x, covariance
 
 
@@ -244,7 +245,7 @@ def runmodel(y, u, nts, nn, nld, nsd,  xgen, Cgen, dgen, q0gen, qgen, m0gen, Age
     qrsq = [rsquared(q, qgen)]
 
     print('begin training')
-    max_epochs = 500
+    max_epochs = 100
     for epoch in range(max_epochs):
         print('epoch {}'.format(epoch))
         print('performing laplace approximation')
