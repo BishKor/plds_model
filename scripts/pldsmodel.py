@@ -6,15 +6,8 @@ import numpy as np
 from newton_method import nr_algo
 import sksparse.cholmod as chol
 from scipy.optimize import minimize
-# import matplotlib.pyplot as plt
 import scipy
 from cholesky import computecov
-
-def kd(i, j):
-    if i == j:
-        return 1.
-    else:
-        return 0.
 
 
 def logposterior(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd):
@@ -112,24 +105,24 @@ def logposteriorhessian(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld):
         h[:-nld, nld:] += od
         h[nld:, :-nld] += od.T
 
-        return h.toarray() #tocsc()
+        return h.tocsc()
     return f
 
 
-def jointloglikelihood(y, nsd, nn, nts, mu, cov, Q, Q0, m0, A, u, B):
+def jointloglikelihood(y, nsd, nn, nts, mu, covd, Q, Q0, m0, A, u, B):
     def f(dC):
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
 
         jll = sum(-y[t*nn:(t+1)*nn] @ C @ mu[t*nld:(t+1)*nld] - y[t*nn:(t+1)*nn] @ d \
-                  + sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + .5 * (C[i] @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i]) +
+                  + sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + .5 * (C[i] @ covd[t] @ C[i]) +
                     d[i]) for i in range(nn))
                     for t in range(nts-1))
         return jll
     return f
 
 
-def jllDerivative(nn, nld, mu, cov, nts, y):
+def jllDerivative(nn, nld, mu, covd, covod, nts, y):
     def f(dC):
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
@@ -137,12 +130,12 @@ def jllDerivative(nn, nld, mu, cov, nts, y):
         djlld = np.zeros(nn)
         for i in range(nn):
             djlld[i] = sum(-y[t*nn+i] \
-                           + np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i]))
+                           + np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i]))
                            for t in range(nts-1))
 
         djllC = [sum(-y[t*nn+i] * mu[t*nld:(t+1)*nld] + \
-                     np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i])) * \
-                     (mu[t*nld:(t+1)*nld] + cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i])
+                     np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) * \
+                     (mu[t*nld:(t+1)*nld] + covd[t] @ C[i])
                      for t in range(nts-1)) for i in range(nn)]
 
         djlldC = np.empty(nn*(nld+1))
@@ -154,7 +147,7 @@ def jllDerivative(nn, nld, mu, cov, nts, y):
     return f
 
 
-def jllHessian(nn, nld, mu, cov, nts, y):
+def jllHessian(nn, nld, mu, covd, covod, nts, y):
     def f(dC):
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
@@ -163,16 +156,16 @@ def jllHessian(nn, nld, mu, cov, nts, y):
 
         for i in range(nn):
             block = np.zeros((1 + nld, 1 + nld))
-            block[0, 0] = sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i])) for t in range(nts-1))
+            block[0, 0] = sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) for t in range(nts-1))
 
-            block[0, 1:] = sum((mu[t*nld:(t+1)*nld] + cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i]) * np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + \
-                    .5 * (C[i] @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i])) for t in range(nts-1))
+            block[0, 1:] = sum((mu[t*nld:(t+1)*nld] + covd[t] @ C[i]) * np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + \
+                    .5 * (C[i] @ covd[t] @ C[i])) for t in range(nts-1))
 
             block[1:, 0] = block[0, 1:]
 
-            block[1:, 1:] = sum((cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] +
-                np.outer(mu[t*nld:(t+1)*nld] + cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i], (mu[t*nld:(t+1)*nld] + cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i]).T))*\
-                np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ C[i]))
+            block[1:, 1:] = sum((covd[t] +
+                np.outer(mu[t*nld:(t+1)*nld] + covd[t] @ C[i], (mu[t*nld:(t+1)*nld] + covd[t] @ C[i]).T))*\
+                np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i]))
                 for t in range(nts-1))
 
             blocks.append(scsp.lil_matrix(block))
@@ -197,13 +190,13 @@ def blocktridiaginv(h, bw, nb):
 
 def laplace_approximation(f, df, hf, x, nts, nld):
     # use NR algorithm to compute minimum of log-likelihood
-    # x = nr_algo(f, df, hf, x)
+    x = nr_algo(f, df, hf, x)
     # inverse of Hessian is covariance matrix
     # covariance = blocktridiaginv(hf(x), nld, nts)
-    res = minimize(f, x, jac=df, hess=hf, method="Newton-CG")
+    # res = minimize(f, x, jac=df, hess=hf, method="Newton-CG")
     # covariance = blocktridiaginv(hf(res.x), nld, nts)
-    covariance = computecov(hf(res.x), nld, nts)
-    return res.x, covariance
+    covdiag, covoffdiag = computecov(hf(x).toarray(), nld, nts)
+    return x, covdiag, covoffdiag
 
 
 def rsquared(A, B):
@@ -250,7 +243,9 @@ def runmodel(y, u, nts, nn, nld, nsd,  xgen, Cgen, dgen, q0gen, qgen, m0gen, Age
         print('epoch {}'.format(epoch))
         print('performing laplace approximation')
         # perform laplace approximation on log-posterior with Newton-Raphson optimization to find mean and covariance
-        mu, cov = laplace_approximation(logposterior(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd),
+        # covd is covariance diagonal blocks. (nld, nld*nts)
+        # covod is covariance off diabonal blocks. (nld, nld*(nts-1))
+        mu, covd, covod = laplace_approximation(logposterior(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd),
                                         logposteriorderivative(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld),
                                         logposteriorhessian(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld),
                                         mu, nts, nld)
@@ -258,23 +253,24 @@ def runmodel(y, u, nts, nn, nld, nsd,  xgen, Cgen, dgen, q0gen, qgen, m0gen, Age
         print('assigning analytic expressions')
         # Use analytic expressions to compute parameters m0, Q, Q0, A, B
         m0 = mu[:nld]
-        q0 = cov[:nld, :nld]
+        q0 = covd[0]
 
-        A = sum(cov[(t+1)*nld:(t+2)*nld, t*nld:(t+1)*nld] + np.outer(mu[(t+1)*nld:(t+2)*nld], mu[t*nld:(t+1)*nld].T) -
+        # A = sum(cov[(t+1)*nld:(t+2)*nld, t*nld:(t+1)*nld] + np.outer(mu[(t+1)*nld:(t+2)*nld], mu[t*nld:(t+1)*nld].T) -
+        #     B @ np.outer(u[t*nsd:(t+1)*nsd], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)) @ \
+        #     np.linalg.inv(sum(cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] +
+        #     np.outer(mu[t*nld:(t+1)*nld], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)))
+
+        A = sum(covod[t].T + np.outer(mu[(t+1)*nld:(t+2)*nld], mu[t*nld:(t+1)*nld].T) -
             B @ np.outer(u[t*nsd:(t+1)*nsd], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)) @ \
-            np.linalg.inv(sum(cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] +
+            np.linalg.inv(sum(covd[t] +
             np.outer(mu[t*nld:(t+1)*nld], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)))
 
         # B = sum(np.outer(mu[(t+1)*nld:(t+2)*nld], u[t*nsd:(t+1)*nsd]) - A @ np.outer(mu[t*nld:(t+1)*nld], u[t*nsd:(t+1)*nsd])
         #         for t in range(nts-1)) @ np.linalg.inv(sum(np.outer(u[t*nsd:(t+1)*nsd], u[t*nsd:(t+1)*nsd].T) for t in range(nts-1)))
 
-
         q = (1/(nts-1))*sum(np.outer((mu[(t+1)*nld:(t+2)*nld] - A @ mu[t*nld:(t+1)*nld]-B@u[t*nsd:(t+1)*nsd]),
                             (mu[(t+1)*nld:(t+2)*nld] - A @ mu[t*nld:(t+1)*nld]-B@u[t*nsd:(t+1)*nsd]).T) +
-                            cov[(t+1)*nld:(t+2)*nld, (t+1)*nld:(t+2)*nld] -
-                            A @ cov[t*nld:(t+1)*nld, (t+1)*nld:(t+2)*nld] -
-                            cov[(t+1)*nld:(t+2)*nld, t*nld:(t+1)*nld] @ A.T +
-                            A @ cov[t*nld:(t+1)*nld, t*nld:(t+1)*nld] @ A.T
+                            covd[t+1] - A @ covod[t] - covod[t].T @ A.T + A @ covd[t] @ A.T
                             for t in range(nts-1))
 
         # Second NR minimization to compute C, d (and in principle, D)
@@ -287,16 +283,16 @@ def runmodel(y, u, nts, nn, nld, nsd,  xgen, Cgen, dgen, q0gen, qgen, m0gen, Age
             dC += list(C[i])
         dC = np.array(dC)
 
-        # dC = nr_algo(jointloglikelihood(y, nsd, nn, nts, mu, cov, q, q0, m0, A, u, B),
-        #              jllDerivative(nn, nld, mu, cov, nts, y),
-        #              jllHessian(nn, nld, mu, cov, nts, y),
-        #              dC)
+        dC = nr_algo(jointloglikelihood(y, nsd, nn, nts, mu, covd, q, q0, m0, A, u, B),
+                     jllDerivative(nn, nld, mu, covd, covod, nts, y),
+                     jllHessian(nn, nld, mu, covd, covod, nts, y),
+                     dC)
 
-        dC = minimize(jointloglikelihood(y, nsd, nn, nts, mu, cov, q, q0, m0, A, u, B),
-                      dC,
-                      jac=jllDerivative(nn, nld, mu, cov, nts, y),
-                      hess=jllHessian(nn, nld, mu, cov, nts, y),
-                      method='Newton-CG').x
+        # dC = minimize(jointloglikelihood(y, nsd, nn, nts, mu, cov, q, q0, m0, A, u, B),
+        #               dC,
+        #               jac=jllDerivative(nn, nld, mu, cov, nts, y),
+        #               hess=jllHessian(nn, nld, mu, cov, nts, y),
+        #               method='Newton-CG').x
 
 
         for i in range(nn):

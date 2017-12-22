@@ -1,6 +1,6 @@
 import numpy as np
 
-nts = 100
+nts = 1000
 nn = 3
 nld = 2
 
@@ -12,8 +12,7 @@ Q0 = np.identity(nld)
 m0 = np.zeros(nld)
 
 x = Q0 @ np.random.randn(nld) + m0
-y = C @ x + d
-r = np.exp(C @ x + d)
+y = np.exp(C @ x + d)
 # y = [np.random.poisson(lam=np.exp(C @ x[0] + d))]
 
 for t in range(nts-1):

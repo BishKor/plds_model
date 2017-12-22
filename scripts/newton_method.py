@@ -16,6 +16,7 @@ def nr_step(f, df, H, x, fold, alpha=.0001, tolx=.0001, stpmax=1000):
     # newton_dir = np.linalg.solve(H, -df)
 
     if np.linalg.norm(newton_dir) > stpmax:
+        print("rescaling newton direction")
         newton_dir = stpmax * newton_dir / np.linalg.norm(newton_dir)
 
     slope = df @ newton_dir
@@ -28,6 +29,9 @@ def nr_step(f, df, H, x, fold, alpha=.0001, tolx=.0001, stpmax=1000):
         tmp = np.abs(newton_dir[d])/max(np.abs(x[d]), 1)
         if tmp > test:
             test = tmp
+
+    if test < 1e-12:
+        return x, fold, True
 
     alamin = tolx/test
 
