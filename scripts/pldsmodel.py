@@ -171,7 +171,7 @@ def jllHessian(nn, nld, mu, covd, covod, nts, y):
             blocks.append(scsp.lil_matrix(block))
 
         HJLL = scsp.block_diag(blocks)
-        return HJLL.toarray() #tocsc()
+        return HJLL.tocsc()
     return f
 
 
@@ -200,14 +200,15 @@ def laplace_approximation(f, df, hf, x, nts, nld):
 
 
 def rsquared(A, B):
-    return np.mean((A-B)**2)
+    counter = 0
     rsq = 0
     for eA, eB in zip(B.flatten(), A.flatten()):
         if eB == 0:
             pass
-            # rsq += (eA-eB)**2/1
         else:
             rsq += (eA-eB)**2/eB**2
+            counter += 1
+
     return 1 - rsq/len(B.flatten())
 
 
