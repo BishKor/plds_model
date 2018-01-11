@@ -70,6 +70,7 @@ def logposteriorderivative(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld):
         df[-nld:] = - C.T @ y[-nn:] \
                     + C.T @ np.exp(C @ x[-nld:] + d) \
                     + Qinv @ (x[-nld:] - A @ x[-2*nld:-nld] - B @ u[-2*nsd:-nsd])
+        print(df.shape)
         return df
     return f
 
@@ -182,20 +183,6 @@ def laplace_approximation(f, df, hf, x, nts, nld):
     return x, covdiag, covoffdiag
 
 
-def rsquared(A, B):
-    return np.mean((A-B)**2)
-    counter = 0
-    rsq = 0
-    for eA, eB in zip(A.flatten(), B.flatten()):
-        if eB == 0:
-            pass
-        else:
-            rsq += (eA-eB)**2/eB**2
-            counter += 1
-
-    return 1 - rsq/counter
-
-
 def runmodel(y, u, nts, nn, nld, nsd):
 
     print('variable initialization')
@@ -208,7 +195,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
     q0 = q0 @ q0.T
     q = np.random.rand(nld, nld)
     q = q @ q.T
-    B = np.zeros((nld, nsd))
+    B = np.random.rand(nld, nsd) * 0.
     mu = np.random.rand(nld*nts)
 
     # Create rsquared arrays
@@ -226,7 +213,6 @@ def runmodel(y, u, nts, nn, nld, nsd):
                                         logposteriorhessian(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld),
                                         mu, nts, nld)
 
-        mu = np.load('../testmats/xgen.npy')
         # print('assigning analytic expressions')
         # Use analytic expressions to compute parameters m0, Q, Q0, A, B
         m0 = mu[:nld]
@@ -268,7 +254,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
 
 if __name__ == "__main__":
     # load data
-    nts = 5000
+    nts = 100
     nn = 300  # number of neurons
     nld = 5  # number of latent dimensions
     nsd = 4
@@ -285,7 +271,6 @@ if __name__ == "__main__":
         # compute what u should be here
         u[int(ot):ot+int((rt+2.75+(4.85-2.75)*(1-cor))*frameHz)] = np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)], np.int)
     u = u.flatten()
-
 
     d, C, A, B, q, q0, m0, mu = runmodel(y, u, nts, nn, nld, nsd)
     np.save("../testmats/xinf.npy", mu)
