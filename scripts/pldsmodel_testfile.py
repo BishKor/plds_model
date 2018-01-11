@@ -1,8 +1,12 @@
 # coding: utf-8
+
 import scipy.io as scio
 import scipy.sparse as scsp
 import numpy as np
 from newton_method import nr_algo
+import sksparse.cholmod as chol
+from scipy.optimize import minimize
+import scipy
 from cholesky import computecov
 
 
@@ -196,22 +200,38 @@ def rsquared(A, B):
     return 1 - rsq/counter
 
 
-def runmodel(y, u, nts, nn, nld, nsd):
+def runmodel(y, u, nts, nn, nld, nsd,  xgen, Cgen, dgen, q0gen, qgen, m0gen, Agen):
 
     print('variable initialization')
     # Initialize parameters to random values
-    C = np.random.rand(nn, nld) * 0.
-    d = np.random.rand(nn) * .0
-    m0 = np.random.rand(nld)
+    # C = np.random.rand(nn, nld) * 0.
+    C = np.load('../testmats/Cgen.npy')
+    # d = np.random.rand(nn) * 0.
+    d = np.load('../testmats/dgen.npy')
+    # m0 = np.random.rand(nld)
+    m0 = np.load('../testmats/m0gen.npy')
     A = np.random.rand(nld, nld) * 0.
+    # A = np.load('../testmats/Agen.npy')
     q0 = np.random.rand(nld, nld)
     q0 = q0 @ q0.T
+    #q0 = np.identity(nld)
     q = np.random.rand(nld, nld)
     q = q @ q.T
+    # q = np.identity(nld)
     B = np.zeros((nld, nsd))
-    mu = np.random.rand(nld*nts)
+    # mu = np.random.rand(nld*nts)
+    mu = np.load('../testmats/xgen.npy')
 
     # Create rsquared arrays
+    # xrsq = [rsquared(mu, xgen)]
+    # Crsq = [rsquared(C, Cgen)]
+    # drsq = [rsquared(d, dgen)]
+    # m0rsq = [rsquared(m0, m0gen)]
+    # Arsq = [rsquared(A, Agen)]
+    # q0rsq = [rsquared(q0, q0gen)]
+    # qrsq = [rsquared(q, qgen)]
+    # brsq = [rsquared(B, Bgen)]
+    # fraclp = []
 
     # print('begin training')
     max_epochs = 30
@@ -264,30 +284,64 @@ def runmodel(y, u, nts, nn, nld, nsd):
             d[i] = dC[i*(nld+1)]
             C[i] = dC[i*(nld+1) + 1:(i+1)*(nld+1)]
 
+        # xrsq.append(rsquared(mu, xgen))
+        # Crsq.append(rsquared(C, Cgen))
+        # drsq.append(rsquared(d, dgen))
+        # m0rsq.append(rsquared(m0, m0gen))
+        # Arsq.append(rsquared(A, Agen))
+        # q0rsq.append(rsquared(q0, q0gen))
+        # qrsq.append(rsquared(q, qgen))
+        # brsq.append(rsquared(B, Bgen))
+    # np.save("../testmats/Brsq.npy", brsq)
+    # np.save("../testmats/xrsq.npy", xrsq)
+    # np.save("../testmats/Crsq.npy", Crsq)
+    # np.save("../testmats/drsq.npy", drsq)
+    # np.save("../testmats/m0rsq.npy", m0rsq)
+    # np.save("../testmats/Arsq.npy", Arsq)
+    # np.save("../testmats/Q0rsq.npy", q0rsq)
+    # np.save("../testmats/Qrsq.npy", qrsq)
+    # np.save("../testmats/fraclp.npy", fraclp)
+
     return d, C, A, B, q, q0, m0, mu
 
 if __name__ == "__main__":
     # load data
-    nts = 5000
-    nn = 300  # number of neurons
-    nld = 5  # number of latent dimensions
+    # print('loading data')
+    # nts = 1000
+    # nn = 300  # number of neurons
+    # nld = 5  # number of latent dimensions
+    # nsd = 4
+    # frameHz = 10  # frames per seconds
+    # data = scio.loadmat('data/compiled_dF033016.mat')
+    # y = data['behavdF'].flatten()[:nts*nn]
+    # onset = np.array(data['onsetFrame'].T[0], np.int8)
+    # resptime = data['resptime'].T[0]
+    # correct = data['correct'][0]
+    # orient = np.array(data['orient'][0], np.int8)
+    # location = np.array((data['location'][0]+1)//2, np.int8)
+    # u = np.zeros((nts, nsd))
+    # for ot, rt, cor, ori, loc in zip(onset, resptime, correct, orient, location):
+    #     # compute what u should be here
+    #     u[int(ot):ot+int((rt+2.75+(4.85-2.75)*(1-cor))*frameHz)] = np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)], np.int)
+    # u = u.flatten()
+
+    nts = 1000
+    nn = 3
+    nld = 2
     nsd = 4
-    frameHz = 10  # frames per seconds
-    data = scio.loadmat('../data/compiled_dF033016.mat')
-    y = data['behavdF'].flatten()[:nts*nn]
-    onset = np.array(data['onsetFrame'].T[0], np.int8)
-    resptime = data['resptime'].T[0]
-    correct = data['correct'][0]
-    orient = np.array(data['orient'][0], np.int8)
-    location = np.array((data['location'][0]+1)//2, np.int8)
-    u = np.zeros((nts, nsd))
-    for ot, rt, cor, ori, loc in zip(onset, resptime, correct, orient, location):
-        # compute what u should be here
-        u[int(ot):ot+int((rt+2.75+(4.85-2.75)*(1-cor))*frameHz)] = np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)], np.int)
-    u = u.flatten()
 
+    y = np.load('../testmats/ygen.npy')
+    u = np.load('../testmats/ugen.npy')
+    xgen = np.load('../testmats/xgen.npy')
+    Cgen = np.load('../testmats/Cgen.npy')
+    dgen = np.load('../testmats/dgen.npy')
+    q0gen = np.load('../testmats/Q0gen.npy')
+    qgen = np.load('../testmats/Qgen.npy')
+    m0gen = np.load('../testmats/m0gen.npy')
+    Agen = np.load('../testmats/Agen.npy')
+    Bgen = np.load('../testmats/Bgen.npy')
 
-    d, C, A, B, q, q0, m0, mu = runmodel(y, u, nts, nn, nld, nsd)
+    d, C, A, B, q, q0, m0, mu = runmodel(y, u, nts, nn, nld, nsd, xgen, Cgen, dgen, q0gen, qgen, m0gen, Agen)
     np.save("../testmats/xinf.npy", mu)
     np.save("../testmats/dinf.npy", d)
     np.save("../testmats/Cinf.npy", C)
@@ -296,3 +350,4 @@ if __name__ == "__main__":
     np.save("../testmats/Qinf.npy", q)
     np.save("../testmats/Q0inf.npy", q0)
     np.save("../testmats/m0inf.npy", m0)
+    print('complete')
