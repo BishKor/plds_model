@@ -4,6 +4,7 @@ import scipy.sparse as scsp
 import numpy as np
 from newton_method import nr_algo
 from cholesky import computecov
+import pickle
 
 
 def logposterior(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd):
@@ -198,8 +199,6 @@ def runmodel(y, u, nts, nn, nld, nsd):
     B = np.random.rand(nld, nsd) * 0.
     mu = np.random.rand(nld*nts)
 
-    # Create rsquared arrays
-
     # print('begin training')
     max_epochs = 30
     for epoch in range(max_epochs):
@@ -254,7 +253,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
 
 if __name__ == "__main__":
     # load data
-    nts = 100
+    nts = 20000
     nn = 300  # number of neurons
     nld = 5  # number of latent dimensions
     nsd = 4
@@ -273,11 +272,8 @@ if __name__ == "__main__":
     u = u.flatten()
 
     d, C, A, B, q, q0, m0, mu = runmodel(y, u, nts, nn, nld, nsd)
-    np.save("../testmats/xinf.npy", mu)
-    np.save("../testmats/dinf.npy", d)
-    np.save("../testmats/Cinf.npy", C)
-    np.save("../testmats/Ainf.npy", A)
-    np.save("../testmats/Binf.npy", B)
-    np.save("../testmats/Qinf.npy", q)
-    np.save("../testmats/Q0inf.npy", q0)
-    np.save("../testmats/m0inf.npy", m0)
+
+    outputdict = {'x':mu, 'A':A, 'B':B, 'C':C, 'd':d, 'Q':q, 'Q0':q0, 'm0':m0}
+    outputfile = open("plds_output.pickle","wb")
+    pickle.dump(outputdict, outputfile)
+    outputfile.close()
