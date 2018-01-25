@@ -188,10 +188,7 @@ def laplace_approximation(f, df, hf, x, nts, nld):
 
 def runmodel(y, u, nts, nn, nld, nsd):
 
-    lapl_time = []
-    ABQ_time = []
-    CD_time = []
-
+    output = []
     print('variable initialization')
     # Initialize parameters to random values
     C = np.random.rand(nn, nld) * 0.
@@ -204,26 +201,25 @@ def runmodel(y, u, nts, nn, nld, nsd):
     q = q @ q.T
     B = np.random.rand(nld, nsd) * 0.
     mu = np.random.rand(nld*nts)
+    previouslogpost = 1000000000
+    previousjll = 1000000000
 
     # print('begin training')
-    max_epochs = 30
+    max_epochs = 50
     for epoch in range(max_epochs):
         print('epoch {}'.format(epoch))
         # print('performing laplace approximation')
         # perform laplace approximation on log-posterior with Newton-Raphson optimization to find mean and covariance
         # covd is covariance diagonal blocks. (nld, nld*nts)
         # covod is covariance off diabonal blocks. (nld, nld*(nts-1))
-        stime = time.clock()
         mu, covd, covod = laplace_approximation(logposterior(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd),
                                         logposteriorderivative(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld),
                                         logposteriorhessian(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld),
                                         mu, nts, nld)
-        lapl_time.append(time.clock() - stime)
 
         # print('assigning analytic expressions')
         # Use analytic expressions to compute parameters m0, Q, Q0, A, B
 
-        stime = time.clock()
         m0 = mu[:nld]
         q0 = covd[0]
 
@@ -239,13 +235,11 @@ def runmodel(y, u, nts, nn, nld, nsd):
                             (mu[(t+1)*nld:(t+2)*nld] - A @ mu[t*nld:(t+1)*nld]-B@u[t*nsd:(t+1)*nsd]).T) +
                             covd[t+1] - A @ covod[t] - covod[t].T @ A.T + A @ covd[t] @ A.T
                             for t in range(nts-1))
-        ABQ_time.append(time.clock() - stime)
 
         # Second NR minimization to compute C, d (and in principle, D)
         # print('performing NR algorithm for parameters C, d')
         # need to vectorize C for the purpose of gradient descent, thus making a vector (d[i], C[i]), i.e. hessian for
         # each neuron
-        stime = time.clock()
         dC = []
         for i in range(nn):
             dC.append(d[i])
@@ -260,14 +254,21 @@ def runmodel(y, u, nts, nn, nld, nsd):
         for i in range(nn):
             d[i] = dC[i*(nld+1)]
             C[i] = dC[i*(nld+1) + 1:(i+1)*(nld+1)]
-        CD_time.append(time.clock() - stime)
 
-    pickle.dump({'cd_time':CD_time, 'estep_time':lapl_time, 'AB_time':ABQ_time})
-    return d, C, A, B, q, q0, m0, mu
+        newjll = jointloglikelihood(y, nsd, nn, nts, mu, covd, q, q0, m0, A, u, B)(dC)
+        newlogpost = logposterior(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd)(mu)
+        if abs(previousjll - newjll) < .5 and abs(previouslogpost - newlogpost) < .5:
+            break
+        else:
+            previousjll = newjll
+            previouslogpost = newlogpost
+
+        output.append(outputdict = {'x':mu, 'A':A, 'B':B, 'C':C, 'd':d, 'Q':q, 'Q0':q0, 'm0':m0})
+    return output
 
 if __name__ == "__main__":
     # load data
-    nts = 500
+    nts = 20000
     nn = 300  # number of neurons
     nld = 5  # number of latent dimensions
     nsd = 4
@@ -285,9 +286,8 @@ if __name__ == "__main__":
         u[int(ot):ot+int((rt+2.75+(4.85-2.75)*(1-cor))*frameHz)] = np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)], np.int)
     u = u.flatten()
 
-    d, C, A, B, q, q0, m0, mu = runmodel(y, u, nts, nn, nld, nsd)
+    output = runmodel(y, u, nts, nn, nld, nsd)
 
-    outputdict = {'x':mu, 'A':A, 'B':B, 'C':C, 'd':d, 'Q':q, 'Q0':q0, 'm0':m0}
     outputfile = open("plds_output_timed.pickle","wb")
-    pickle.dump(outputdict, outputfile)
+    pickle.dump(output, outputfile)
     outputfile.close()
