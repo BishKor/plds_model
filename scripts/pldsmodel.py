@@ -288,6 +288,6 @@ if __name__ == "__main__":
 
     output = runmodel(y, u, nts, nn, nld, nsd)
 
-    outputfile = open("plds_output_timed.pickle","wb")
+    outputfile = open("../outputs/plds_01-24-18.pickle","wb")
     pickle.dump(output, outputfile)
     outputfile.close()
