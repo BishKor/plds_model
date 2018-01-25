@@ -263,7 +263,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
             previousjll = newjll
             previouslogpost = newlogpost
 
-        output.append(outputdict = {'x':mu, 'A':A, 'B':B, 'C':C, 'd':d, 'Q':q, 'Q0':q0, 'm0':m0})
+        output.append({'x':mu, 'A':A, 'B':B, 'C':C, 'd':d, 'Q':q, 'Q0':q0, 'm0':m0})
     return output
 
 if __name__ == "__main__":
