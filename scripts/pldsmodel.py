@@ -74,7 +74,6 @@ def logposteriorderivative(y, C, d, A, B, q, q0, m0, u, nts, nn, nsd, nld):
         df[-nld:] = - C.T @ y[-nn:] \
                     + C.T @ np.exp(C @ x[-nld:] + d) \
                     + Qinv @ (x[-nld:] - A @ x[-2*nld:-nld] - B @ u[-2*nsd:-nsd])
-        print(df.shape)
         return df
     return f
 
@@ -142,7 +141,7 @@ def jllDerivative(nn, nld, mu, covd, covod, nts, y):
         djlldC = np.empty(nn*(nld+1))
         for i in range(nn):
             djlldC[i*(nld+1)] = djlld[i]
-            djlldC[i*(nld+1) + 1:(i+1)*(nld+1)] = djllC[i]
+            djlldC[i*(nld+1) + 1:(i+1)*(nld+1)] = djllC[i] + .5 * np.sign(C[i]) + .5 * C[i]
 
         return djlldC
     return f
@@ -156,15 +155,15 @@ def jllHessian(nn, nld, mu, covd, covod, nts, y):
         blocks = []
 
         for i in range(nn):
-            block = np.zeros((1 + nld, 1 + nld))
+            block = .5 * np.identity(1 + nld)
             block[0, 0] = sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) for t in range(nts-1))
 
-            block[0, 1:] = sum((mu[t*nld:(t+1)*nld] + covd[t] @ C[i]) * np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + \
+            block[0, 1:] += sum((mu[t*nld:(t+1)*nld] + covd[t] @ C[i]) * np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + \
                     .5 * (C[i] @ covd[t] @ C[i])) for t in range(nts-1))
 
-            block[1:, 0] = block[0, 1:]
+            block[1:, 0] += block[0, 1:]
 
-            block[1:, 1:] = sum((covd[t] +
+            block[1:, 1:] += sum((covd[t] +
                 np.outer(mu[t*nld:(t+1)*nld] + covd[t] @ C[i], (mu[t*nld:(t+1)*nld] + covd[t] @ C[i]).T))*\
                 np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i]))
                 for t in range(nts-1))
@@ -268,7 +267,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
 
 if __name__ == "__main__":
     # load data
-    nts = 2000
+    nts = 500
     nn = 300  # number of neurons
     nld = 5  # number of latent dimensions
     nsd = 4
