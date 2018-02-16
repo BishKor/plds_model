@@ -1,5 +1,6 @@
 import scipy.sparse as scsp
 from newton_method import *
+import numpy as np
 
 
 def logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
@@ -17,11 +18,10 @@ def logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
     :return: the log-posterior of eQ.4 in Macke et al. 2011
     """
 
+    Q0inv = np.linalg.inv(Q0)
+    Qinv = np.linalg.inv(Q)
+
     def f(x):
-
-        Q0inv = np.linalg.inv(Q0)
-        Qinv = np.linalg.inv(Q)
-
         constants = .5 * np.log(np.linalg.det(Q0)) + .5 * (nts-1) * np.log(np.linalg.det(Q))
 
         term1a = - sum(y[t*nn:(t+1)*nn] @ (C @ x[t*nld:(t+1)*nld] + d) for t in range(nts))
@@ -35,23 +35,23 @@ def logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
                          (x[(t+1)*nld:(t+2)*nld] - A @ x[t*nld:(t+1)*nld] - B @ u[t*nsd:(t+1)*nsd])
                          for t in range(nts-1))
 
-        return constants + term1a + term1b + term2 + term3
+        return -(constants + term1a + term1b + term2 + term3)
     return f
 
 
 def logposteriorderivative(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
-    def f(x):
-        Qinv = np.linalg.inv(Q)
-        Q0inv = np.linalg.inv(Q0)
-        ATQinv = A.T @ Qinv
-        ATQinvA = A.T @ Qinv @ A
-        ATQinvB = A.T @ Qinv @ B
-        QinvA = Qinv @ A
-        QinvB = Qinv @ B
+    Qinv = np.linalg.inv(Q)
+    Q0inv = np.linalg.inv(Q0)
+    ATQinv = A.T @ Qinv
+    ATQinvA = A.T @ Qinv @ A
+    ATQinvB = A.T @ Qinv @ B
+    QinvA = Qinv @ A
+    QinvB = Qinv @ B
 
+    def f(x):
         df = np.zeros_like(x)
-        df[:nld] = - C.T @ y[:nn] + C.T @ np.exp(C @ x[:nld] + d) + \
-                   Q0inv @ (x[:nld] - m0) - ATQinv @ (x[nld:2*nld] - A @ x[:nld] - B @ u[:nsd])
+        df[:nld] = - C.T @ y[:nn] + C.T @ np.exp(C @ x[:nld] + d) + Q0inv @ (x[:nld] - m0) - \
+                   ATQinv @ (x[nld:2*nld] - A @ x[:nld] - B @ u[:nsd])
 
         for t in range(1, nts-1):
             df[t*nld:(t+1)*nld] = - C.T @ y[t*nn:(t+1)*nn] \
@@ -71,12 +71,14 @@ def logposteriorderivative(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
 
 
 def logposteriorhessian(C, d, A, Q, Q0, nts, nn, nld):
+
+    Qinv = np.linalg.inv(Q)
+    Q0inv = np.linalg.inv(Q0)
+    ATQinvA = A.T @ Qinv @ A
+    ATQinvAplusQinv = ATQinvA + Qinv
+    ATQinv = A.T @ Qinv
+
     def f(x):
-        Qinv = np.linalg.inv(Q)
-        Q0inv = np.linalg.inv(Q0)
-        ATQinvA = A.T @ Qinv @ A
-        ATQinvAplusQinv = ATQinvA + Qinv
-        ATQinv = A.T @ Qinv
 
         diag = []
         off_diag = []
@@ -108,7 +110,7 @@ def jointloglikelihood(nld, nn, nts, mu, covd, y):
 
         jll = sum(-y[t*nn:(t+1)*nn] @ C @ mu[t*nld:(t+1)*nld] - y[t*nn:(t+1)*nn] @ d \
                   + sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + .5 * (C[i] @ covd[t] @ C[i]) +
-                    d[i]) for i in range(nn)) for t in range(nts-1)) # + .5 * .1 * np.sum(C**2) + .1 * np.sum(np.abs(C))
+                    d[i]) for i in range(nn)) for t in range(nts-1)) + .5 * .1 * np.sum(C**2) + .1 * np.sum(np.abs(C))
         return jll
     return f
 
@@ -132,7 +134,7 @@ def jllDerivative(nn, nld, mu, covd, nts, y):
         djlldC = np.empty(nn*(nld+1))
         for i in range(nn):
             djlldC[i*(nld+1)] = djlld[i]
-            djlldC[i*(nld+1) + 1:(i+1)*(nld+1)] = djllC[i]  # + .1 * np.sign(C[i]) + .1 * C[i]
+            djlldC[i*(nld+1) + 1:(i+1)*(nld+1)] = djllC[i] + .1 * np.sign(C[i]) + .1 * C[i]
 
         return djlldC
     return f
@@ -146,7 +148,7 @@ def jllHessian(nn, nld, mu, covd, nts):
         blocks = []
 
         for i in range(nn):
-            block = .5 * np.identity(1 + nld)
+            block = .1 * np.identity(1 + nld)
             block[0, 0] = sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) for t in range(nts-1))
 
             block[0, 1:] += sum((mu[t*nld:(t+1)*nld] + covd[t] @ C[i]) * np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + \
@@ -157,7 +159,7 @@ def jllHessian(nn, nld, mu, covd, nts):
             block[1:, 1:] += sum((covd[t] +
                 np.outer(mu[t*nld:(t+1)*nld] + covd[t] @ C[i], (mu[t*nld:(t+1)*nld] + covd[t] @ C[i]).T))*\
                 np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i]))
-                for t in range(nts-1))  # + .1 * np.sum(C)
+                for t in range(nts-1))
 
             blocks.append(scsp.lil_matrix(block))
 

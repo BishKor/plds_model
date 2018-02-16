@@ -33,7 +33,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
         # perform laplace approximation on log-posterior with Newton-Raphson optimization to find mean and covariance
         # covd is covariance diagonal blocks. (nld, nld*nts)
         # covod is covariance off diabonal blocks. (nld, nld*(nts-1))
-        mu, covd, covod = laplace_approximation(logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nld, nsd),
+        mu, covd, covod = laplace_approximation(logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld),
                                                 logposteriorderivative(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld),
                                                 logposteriorhessian(C, d, A, Q, Q0, nts, nn, nld),
                                                 mu, nts, nld)
@@ -68,7 +68,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
             dC += list(C[i])
         dC = np.array(dC)
 
-        dC = nr_algo(jointloglikelihood(nld, nn, nts, mu, covd),
+        dC = nr_algo(jointloglikelihood(y, nn, nts, nld, mu, covd),
                      jllDerivative(nn, nld, mu, covd, nts, y),
                      jllHessian(nn, nld, mu, covd, nts),
                      dC)
