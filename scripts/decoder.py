@@ -15,4 +15,11 @@ u = np.zeros((nts, nsd))
 for ot, rt, cor, ori, loc in zip(onset, resptime, correct, orient, location):
     # compute what u should be here
     u[int(ot):ot+int((rt+2.75+(4.85-2.75)*(1-cor))*frameHz)] = np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)], np.int)
-u = u.flatten()
+
+
+
+# make a list of targets (stimuli)
+# make a list of inputs (ca2data) with only data that is N time steps before and after stimuli offset
+# train an SVM for each time step
+# test each of those SVMs on each of the time steps (this will produce a 2D heatmap plot: train time vs test time)
+# create visualization
