@@ -92,22 +92,26 @@ def runmodel(y, u, nts, nn, nld, nsd):
 
 
 def load_data():
-    nts = 20000
-    nn = 300  # number of neurons
-    nld = 5  # number of latent dimensions
     nsd = 4
-    frameHz = 10  # frames per seconds
     data = scio.loadmat('../data/compiled_dF033016.mat')
-    y = data['behavdF'].flatten()[:nts*nn]
-    onset = np.array(data['onsetFrame'].T[0], np.int8)
+    frameHz = data['FrameRateHz'][0, 0]  # frames per seconds
+    y = data['behavdF'].T
+    onsetframe = data['onsetFrame'].T[0]
+    onsettime = np.array(data['onsetFrame'].T[0]) / frameHz
+
     resptime = data['resptime'].T[0]
     correct = data['correct'][0]
+
+    offsettime = onsettime + resptime + 2.75 + (4.85 - 2.75) * (1 - correct)
+    offsetframe = (offsettime * frameHz).astype(np.int32)
+
     orient = np.array(data['orient'][0], np.int8)
-    location = np.array((data['location'][0]+1)//2, np.int8)
+    location = np.array((data['location'][0] + 1) // 2, np.int8)
+
     u = np.zeros((nts, nsd))
-    for ot, rt, cor, ori, loc in zip(onset, resptime, correct, orient, location):
-        # compute what u should be here
-        u[int(ot):ot+int((rt+2.75+(4.85-2.75)*(1-cor))*frameHz)] = np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)], np.int)
+    for onf, off, ori, loc in zip(onsetframe, offsetframe, orient, location):
+        for frame in np.arange(onf, off, dtype=np.int32):
+            u[frame] = np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)])
     u = u.flatten()
     return y, u, nts, nn, nld, nsd
 

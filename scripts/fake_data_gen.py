@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 
 nts = 1000
-nn = 4
+nn = 40
 nld = 2
 nsd = 4
 A = np.identity(nld)*.4 + .1

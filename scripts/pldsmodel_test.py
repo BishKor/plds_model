@@ -11,24 +11,24 @@ def runmodel(y, u, nts, nn, nld, nsd, actualparams):
     print('variable initialization')
     # Initialize parameters to random values
 
-    C = actualparams['C']
-    d = actualparams['d']
-    m0 = actualparams['m0']
-    A = actualparams['A']
-    Q0 = actualparams['Q0']
-    Q = actualparams['Q']
-    B = actualparams['B']
+    # C = actualparams['C']
+    # d = actualparams['d']
+    # m0 = actualparams['m0']
+    # A = actualparams['A']
+    # Q0 = actualparams['Q0']
+    # Q = actualparams['Q']
+    # B = actualparams['B']
     # mu = actualparams['x']
 
-    # C = np.random.rand(nn, nld)
-    # d = np.random.rand(nn)
-    # m0 = np.random.rand(nld)
-    # A = np.random.rand(nld, nld) * .1
-    # Q0 = np.random.rand(nld, nld)
-    # Q0 = Q0 @ Q0.T
-    # Q = np.random.rand(nld, nld)
-    # Q = Q @ Q.T
-    # B = np.random.rand(nld, nsd) * .1
+    C = np.random.rand(nn, nld)
+    d = np.random.rand(nn)
+    m0 = np.random.rand(nld)
+    A = np.random.rand(nld, nld) * .1
+    Q0 = np.random.rand(nld, nld)
+    Q0 = Q0 @ Q0.T
+    Q = np.random.rand(nld, nld)
+    Q = Q @ Q.T
+    B = np.random.rand(nld, nsd) * .1
     mu = np.random.rand(nld*nts)
 
     tmpop = {'x': mu, 'A': A, 'B': B, 'C': C, 'd': d, 'Q': Q, 'Q0': Q0, 'm0': m0}
@@ -38,7 +38,7 @@ def runmodel(y, u, nts, nn, nld, nsd, actualparams):
     previoustheta = np.concatenate([A.flatten(), B.flatten(), C.flatten(), d, Q.flatten(), Q0.flatten(), m0])
 
     # print('begin training')
-    max_epochs = 5
+    max_epochs = 20
     for epoch in range(max_epochs):
         print('epoch {}'.format(epoch))
         # print('performing laplace approximation')
@@ -52,47 +52,47 @@ def runmodel(y, u, nts, nn, nld, nsd, actualparams):
 
         # Use analytic expressions to compute parameters m0, Q, Q0, A, B
         #
-        # m0 = mu[:nld]
-        # Q0 = covd[0]
-        #
-        # A = sum(covod[t].T + np.outer(mu[(t+1)*nld:(t+2)*nld], mu[t*nld:(t+1)*nld].T) -
-        #     B @ np.outer(u[t*nsd:(t+1)*nsd], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)) @ \
-        #     np.linalg.inv(sum(covd[t] + np.outer(mu[t*nld:(t+1)*nld], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)))
-        #
-        # B = sum(np.outer(mu[(t+1)*nld:(t+2)*nld], u[t*nsd:(t+1)*nsd]) -
-        #         A @ np.outer(mu[t*nld:(t+1)*nld], u[t*nsd:(t+1)*nsd])
-        #         for t in range(nts-1)) @ np.linalg.inv(sum(np.outer(u[t*nsd:(t+1)*nsd], u[t*nsd:(t+1)*nsd].T)
-        #                                                    for t in range(nts-1)))
-        #
-        # Q = (1/(nts-1))*sum(np.outer((mu[(t+1)*nld:(t+2)*nld] - A @ mu[t*nld:(t+1)*nld]-B@u[t*nsd:(t+1)*nsd]),
-        #                     (mu[(t+1)*nld:(t+2)*nld] - A @ mu[t*nld:(t+1)*nld]-B@u[t*nsd:(t+1)*nsd]).T) +
-        #                     covd[t+1] - A @ covod[t] - covod[t].T @ A.T + A @ covd[t] @ A.T
-        #                     for t in range(nts-1))
+        m0 = mu[:nld]
+        Q0 = covd[0]
+
+        A = sum(covod[t].T + np.outer(mu[(t+1)*nld:(t+2)*nld], mu[t*nld:(t+1)*nld].T) -
+            B @ np.outer(u[t*nsd:(t+1)*nsd], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)) @ \
+            np.linalg.inv(sum(covd[t] + np.outer(mu[t*nld:(t+1)*nld], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)))
+
+        B = sum(np.outer(mu[(t+1)*nld:(t+2)*nld], u[t*nsd:(t+1)*nsd]) -
+                A @ np.outer(mu[t*nld:(t+1)*nld], u[t*nsd:(t+1)*nsd])
+                for t in range(nts-1)) @ np.linalg.inv(sum(np.outer(u[t*nsd:(t+1)*nsd], u[t*nsd:(t+1)*nsd].T)
+                                                           for t in range(nts-1)))
+
+        Q = (1/(nts-1))*sum(np.outer((mu[(t+1)*nld:(t+2)*nld] - A @ mu[t*nld:(t+1)*nld]-B@u[t*nsd:(t+1)*nsd]),
+                            (mu[(t+1)*nld:(t+2)*nld] - A @ mu[t*nld:(t+1)*nld]-B@u[t*nsd:(t+1)*nsd]).T) +
+                            covd[t+1] - A @ covod[t] - covod[t].T @ A.T + A @ covd[t] @ A.T
+                            for t in range(nts-1))
 
         # Second NR minimization to compute C, d (and in principle, D)
         # print('performing NR algorithm for parameters C, d')
         # need to vectorize C for the purpose of gradient descent, thus making a vector (d[i], C[i]), i.e. hessian for
         # each neuron
-        # dC = np.insert(C, 0, d, axis=1).flatten()
-        #
-        # dC = nr_algo(jointloglikelihood(nld, nn, nts, mu, covd, y),
-        #              jllDerivative(nn, nld, mu, covd, nts, y),
-        #              jllHessian(nn, nld, mu, covd, nts),
-        #              dC)
-        #
-        # for i in range(nn):
-        #     d[i] = dC[i*(nld+1)]
-        #     C[i] = dC[i*(nld+1) + 1:(i+1)*(nld+1)]
+        dC = np.insert(C, 0, d, axis=1).flatten()
+
+        dC = nr_algo(jointloglikelihood(nld, nn, nts, mu, covd, y),
+                     jllDerivative(nn, nld, mu, covd, nts, y),
+                     jllHessian(nn, nld, mu, covd, nts),
+                     dC)
+
+        for i in range(nn):
+            d[i] = dC[i*(nld+1)]
+            C[i] = dC[i*(nld+1) + 1:(i+1)*(nld+1)]
 
         tmpop = {'x': mu, 'A': A, 'B': B, 'C': C, 'd': d, 'Q': Q, 'Q0': Q0, 'm0': m0}
         for k in tmpop.keys():
             output[k].append(tmpop[k])
         theta = np.concatenate([A.flatten(), B.flatten(), C.flatten(), d, Q.flatten(), Q0.flatten(), m0])
         criterion = np.max(np.abs(theta - previoustheta)/np.maximum(1e-4, np.abs(previoustheta)))
-        # if criterion < 1e-5:
-        #     break
-        # else:
-        #     previoustheta = theta
+        if criterion < 1e-5:
+            break
+        else:
+            previoustheta = theta
 
     return output
 
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     
     output = runmodel(vals['y'], vals['u'], vals['nts'], vals['nn'], vals['nld'], vals['nsd'], vals)
     now = datetime.datetime.now()
-    outputfilepath = "../testmats/mu_free.pldsop"
+    outputfilepath = "../testmats/all_free.pldsop"
     # outputfilepath = "../testmats/pldstestrun_{}-{}-{}-{}-{}.pldsop".format(now.year, now.month, now.day, now.hour,
     #                                                                          now.minute)
     outputfile = open(outputfilepath, "wb")
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
     def rsq(a, b):
-        return np.mean(np.abs((a-b)**2)/np.maximum(1e-4, np.abs(b)))
+        return np.mean(np.abs((a-b)**2)/np.maximum(1e-4, np.abs(b)**2))
 
     inf = pickle.load(open(outputfilepath, 'rb'))
     actual = pickle.load(open('../testmats/testparamsanddata.pldsip', 'rb'))
@@ -139,4 +139,4 @@ if __name__ == "__main__":
         print("Actual Value for " + p)
         print(actual[p])
     plt.xlabel('training epoch')
-    plt.savefig('../testmats/mu_free.png')
+    plt.savefig('../testmats/all_free.png')
