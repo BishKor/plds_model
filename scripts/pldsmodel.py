@@ -4,7 +4,6 @@ from math_plds import *
 import numpy as np
 from newton_method import nr_algo
 import pickle
-import time
 import datetime
 
 
@@ -23,7 +22,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
     B = np.random.rand(nld, nsd) * 0.
     mu = np.random.rand(nld*nts)
 
-    previoustheta = 1e10
+    previoustheta = np.concatenate([A.flatten(), B.flatten(), C.flatten(), d, Q.flatten(), Q0.flatten(), m0])
 
     # print('begin training')
     max_epochs = 50
@@ -40,7 +39,6 @@ def runmodel(y, u, nts, nn, nld, nsd):
 
         # print('assigning analytic expressions')
         # Use analytic expressions to compute parameters m0, Q, Q0, A, B
-
         m0 = mu[:nld]
         Q0 = covd[0]
 
@@ -71,7 +69,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
         dC = nr_algo(jointloglikelihood(y, nn, nts, nld, mu, covd),
                      jllDerivative(nn, nld, mu, covd, nts, y),
                      jllHessian(nn, nld, mu, covd, nts),
-                     dC)
+                     dC.copy())
 
         for i in range(nn):
             d[i] = dC[i*(nld+1)]
@@ -93,6 +91,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
 
 def load_data():
     nsd = 4
+    nts = 20000
     data = scio.loadmat('../data/compiled_dF033016.mat')
     frameHz = data['FrameRateHz'][0, 0]  # frames per seconds
     y = data['behavdF'].T
@@ -113,7 +112,7 @@ def load_data():
         for frame in np.arange(onf, off, dtype=np.int32):
             u[frame] = np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)])
     u = u.flatten()
-    return y, u, nts, nn, nld, nsd
+    return y[:nts], u[:nts], nts, nn, nld, nsd
 
 
 if __name__ == "__main__":
