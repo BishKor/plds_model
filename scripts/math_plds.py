@@ -117,6 +117,7 @@ def jointloglikelihood(nld, nn, nts, mu, covd, y):
 
 def jllDerivative(nn, nld, mu, covd, nts, y):
     def f(dC):
+        print(nld)
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
 

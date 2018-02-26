@@ -25,7 +25,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
     previoustheta = np.concatenate([A.flatten(), B.flatten(), C.flatten(), d, Q.flatten(), Q0.flatten(), m0])
 
     # print('begin training')
-    max_epochs = 50
+    max_epochs = 100
     for epoch in range(max_epochs):
         print('epoch {}'.format(epoch))
         # print('performing laplace approximation')
@@ -60,16 +60,10 @@ def runmodel(y, u, nts, nn, nld, nsd):
         # print('performing NR algorithm for parameters C, d')
         # need to vectorize C for the purpose of gradient descent, thus making a vector (d[i], C[i]), i.e. hessian for
         # each neuron
-        dC = []
-        for i in range(nn):
-            dC.append(d[i])
-            dC += list(C[i])
-        dC = np.array(dC)
-
-        dC = nr_algo(jointloglikelihood(y, nn, nts, nld, mu, covd),
+        dC = nr_algo(jointloglikelihood(nld, nn, nts, mu, covd, y),
                      jllDerivative(nn, nld, mu, covd, nts, y),
                      jllHessian(nn, nld, mu, covd, nts),
-                     dC.copy())
+                     np.insert(C, 0, d, axis=1).flatten())
 
         for i in range(nn):
             d[i] = dC[i*(nld+1)]
@@ -90,8 +84,10 @@ def runmodel(y, u, nts, nn, nld, nsd):
 
 
 def load_data():
+    nld = 2
+    nn = 300
     nsd = 4
-    nts = 20000
+    nts = 1000
     data = scio.loadmat('../data/compiled_dF033016.mat')
     frameHz = data['FrameRateHz'][0, 0]  # frames per seconds
     y = data['behavdF'].T
@@ -107,12 +103,12 @@ def load_data():
     orient = np.array(data['orient'][0], np.int8)
     location = np.array((data['location'][0] + 1) // 2, np.int8)
 
-    u = np.zeros((nts, nsd))
+    u = np.zeros((y.shape[0], nsd))
     for onf, off, ori, loc in zip(onsetframe, offsetframe, orient, location):
         for frame in np.arange(onf, off, dtype=np.int32):
             u[frame] = np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)])
-    u = u.flatten()
-    return y[:nts], u[:nts], nts, nn, nld, nsd
+
+    return y.flatten()[:nts*nn], u.flatten()[:nts*nsd], nts, nn, nld, nsd
 
 
 if __name__ == "__main__":
@@ -120,6 +116,7 @@ if __name__ == "__main__":
     y, u, nts, nn, nld, nsd = load_data()
     output = runmodel(y, u, nts, nn, nld, nsd)
     now = datetime.datetime.now()
-    outputfile = open("../outputs/pldsrun_{}-{}-{}-{}-{}.pldsop".format(now.year, now.month, now.day, now.hour, now.minute), "wb")
+    outputfile = open("../outputs/pldsrun_{}-{}-{}-{}-{}_nld={}.pldsop".format(now.year, now.month, now.day, now.hour,
+                                                                               now.minute, nld), "wb")
     pickle.dump(output, outputfile)
     outputfile.close()
