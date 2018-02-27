@@ -1,9 +1,11 @@
 import scipy.sparse as scsp
 from newton_method import *
 import numpy as np
+from memory_profiler import profile
 
 
 def logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
+
     """
     :param y: numpy array for flattened neuron G2+ timeseries spiking data
     :param C: latent -> neuron space transformation matrix
@@ -21,21 +23,22 @@ def logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
     Q0inv = np.linalg.inv(Q0)
     Qinv = np.linalg.inv(Q)
 
+    @profile
     def f(x):
-        constants = .5 * np.log(np.linalg.det(Q0)) + .5 * (nts-1) * np.log(np.linalg.det(Q))
+        lptotal = .5 * np.log(np.linalg.det(Q0)) + .5 * (nts-1) * np.log(np.linalg.det(Q))
 
-        term1a = - sum(y[t*nn:(t+1)*nn] @ (C @ x[t*nld:(t+1)*nld] + d) for t in range(nts))
+        lptotal += - sum(y[t*nn:(t+1)*nn] @ (C @ x[t*nld:(t+1)*nld] + d) for t in range(nts))
 
-        term1b = sum(np.sum(np.exp(C @ x[t*nld:(t+1)*nld] + d)) for t in range(nts))
+        lptotal += sum(np.sum(np.exp(C @ x[t*nld:(t+1)*nld] + d)) for t in range(nts))
 
-        term2 = .5 * (x[:nld] - m0).T @ Q0inv @ (x[:nld] - m0)
+        lptotal += .5 * (x[:nld] - m0).T @ Q0inv @ (x[:nld] - m0)
 
-        term3 = .5 * sum((x[(t+1)*nld:(t+2)*nld] - A @ x[t*nld:(t+1)*nld] - B @ u[t*nsd:(t+1)*nsd]).T
+        lptotal += .5 * sum((x[(t+1)*nld:(t+2)*nld] - A @ x[t*nld:(t+1)*nld] - B @ u[t*nsd:(t+1)*nsd]).T
                          @ Qinv @
                          (x[(t+1)*nld:(t+2)*nld] - A @ x[t*nld:(t+1)*nld] - B @ u[t*nsd:(t+1)*nsd])
                          for t in range(nts-1))
 
-        return -(constants + term1a + term1b + term2 + term3)
+        return - lptotal
     return f
 
 
@@ -48,13 +51,14 @@ def logposteriorderivative(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
     QinvA = Qinv @ A
     QinvB = Qinv @ B
 
+    @profile
     def f(x):
         df = np.zeros_like(x)
-        df[:nld] = - C.T @ y[:nn] + C.T @ np.exp(C @ x[:nld] + d) + Q0inv @ (x[:nld] - m0) - \
+        df[:nld] += - C.T @ y[:nn] + C.T @ np.exp(C @ x[:nld] + d) + Q0inv @ (x[:nld] - m0) - \
                    ATQinv @ (x[nld:2*nld] - A @ x[:nld] - B @ u[:nsd])
 
         for t in range(1, nts-1):
-            df[t*nld:(t+1)*nld] = - C.T @ y[t*nn:(t+1)*nn] \
+            df[t*nld:(t+1)*nld] += - C.T @ y[t*nn:(t+1)*nn] \
                                      + C.T @ np.exp(C @ x[t*nld:(t+1)*nld] + d) \
                                   - ATQinv @ x[(t+1)*nld:(t+2)*nld] \
                                   + ATQinvA @ x[t*nld:(t+1)*nld] \
@@ -63,7 +67,7 @@ def logposteriorderivative(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
                                   - QinvA @ x[(t-1)*nld:t*nld] \
                                   - QinvB @ u[(t-1)*nsd:t*nsd]
 
-        df[-nld:] = - C.T @ y[-nn:] + C.T @ np.exp(C @ x[-nld:] + d) \
+        df[-nld:] += - C.T @ y[-nn:] + C.T @ np.exp(C @ x[-nld:] + d) \
                     + Qinv @ (x[-nld:] - A @ x[-2*nld:-nld] - B @ u[-2*nsd:-nsd])
 
         return df
@@ -78,6 +82,7 @@ def logposteriorhessian(C, d, A, Q, Q0, nts, nn, nld):
     ATQinvAplusQinv = ATQinvA + Qinv
     ATQinv = A.T @ Qinv
 
+    @profile
     def f(x):
 
         diag = []
@@ -104,6 +109,7 @@ def logposteriorhessian(C, d, A, Q, Q0, nts, nn, nld):
 
 
 def jointloglikelihood(nld, nn, nts, mu, covd, y):
+    @profile
     def f(dC):
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
@@ -116,6 +122,7 @@ def jointloglikelihood(nld, nn, nts, mu, covd, y):
 
 
 def jllDerivative(nn, nld, mu, covd, nts, y):
+    @profile
     def f(dC):
         print(nld)
         d = dC[::nld+1]
@@ -142,6 +149,7 @@ def jllDerivative(nn, nld, mu, covd, nts, y):
 
 
 def jllHessian(nn, nld, mu, covd, nts):
+    @profile
     def f(dC):
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
@@ -168,7 +176,7 @@ def jllHessian(nn, nld, mu, covd, nts):
         return HJLL.tocsc()
     return f
 
-
+@profile
 def computecov(h, nld, nts):
     # compute U
     Udiag = list(range(nts))
@@ -177,6 +185,11 @@ def computecov(h, nld, nts):
     for t in range(1, nts):  # t goes from 1 to nts-1
         Uoff[t-1] = np.linalg.inv(Udiag[t-1].T) @ h[(t-1)*nld:t*nld, t*nld:(t+1)*nld]
         Udiag[t] = np.linalg.cholesky(h[t*nld:(t+1)*nld, t*nld:(t+1)*nld] - Uoff[t-1].T @ Uoff[t-1]).T
+
+    # Udiag[0] = np.linalg.cholesky(hdiag[0]).T
+    # for t in range(1, nts):  # t goes from 1 to nts-1
+    #     Uoff[t-1] = np.linalg.inv(Udiag[t-1].T) @ hoffdiag[t]
+    #     Udiag[t] = np.linalg.cholesky(hdiag[t] - Uoff[t-1].T @ Uoff[t-1]).T
 
     covdiag = list(range(nts))
     covoff = list(range(nts-1))
@@ -188,7 +201,7 @@ def computecov(h, nld, nts):
 
     return covdiag, covoff
 
-
+@profile
 def laplace_approximation(f, df, hf, x, nts, nld):
     # use NR algorithm to compute minimum of log-likelihood
     x = nr_algo(f, df, hf, x)
