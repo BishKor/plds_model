@@ -1,11 +1,31 @@
 import scipy.sparse as scsp
 from newton_method import *
 import numpy as np
-from memory_profiler import profile
+# from memory_profiler import profile
+
+
+def blocktridiag(diag, abovediag, belowdiag):
+    nmat = len(diag)
+    rows = []
+    for ia, a in enumerate(diag):
+        row = [None]*nmat
+        if scsp.issparse(a):
+            row[ia] = a
+            if ia < nmat-1:
+                row[ia + 1] = abovediag[ia]
+            if ia > 0:
+                row[ia - 1] = belowdiag[ia - 1]
+        else:
+            row[ia] = scsp.coo_matrix(a)
+            if ia < nmat-1:
+                row[ia + 1] = scsp.coo_matrix(abovediag[ia])
+            if ia > 0:
+                row[ia - 1] = scsp.coo_matrix(belowdiag[ia - 1])
+        rows.append(row)
+    return scsp.bmat(rows, format='csc')
 
 
 def logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
-
     """
     :param y: numpy array for flattened neuron G2+ timeseries spiking data
     :param C: latent -> neuron space transformation matrix
@@ -22,9 +42,7 @@ def logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
 
     Q0inv = np.linalg.inv(Q0)
     Qinv = np.linalg.inv(Q)
-
-    @profile
-    def f(x):
+    def flp(x):
         lptotal = .5 * np.log(np.linalg.det(Q0)) + .5 * (nts-1) * np.log(np.linalg.det(Q))
 
         lptotal += - sum(y[t*nn:(t+1)*nn] @ (C @ x[t*nld:(t+1)*nld] + d) for t in range(nts))
@@ -37,9 +55,8 @@ def logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
                          @ Qinv @
                          (x[(t+1)*nld:(t+2)*nld] - A @ x[t*nld:(t+1)*nld] - B @ u[t*nsd:(t+1)*nsd])
                          for t in range(nts-1))
-
-        return - lptotal
-    return f
+        return -lptotal
+    return flp
 
 
 def logposteriorderivative(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
@@ -50,28 +67,25 @@ def logposteriorderivative(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
     ATQinvB = A.T @ Qinv @ B
     QinvA = Qinv @ A
     QinvB = Qinv @ B
-
-    @profile
-    def f(x):
+    
+    def flpg(x):
         df = np.zeros_like(x)
-        df[:nld] += - C.T @ y[:nn] + C.T @ np.exp(C @ x[:nld] + d) + Q0inv @ (x[:nld] - m0) - \
-                   ATQinv @ (x[nld:2*nld] - A @ x[:nld] - B @ u[:nsd])
+        df[:nld] += - C.T @ y[:nn] + C.T @ np.exp(C @ x[:nld] + d) + Q0inv @ (x[:nld] - m0) - ATQinv @ (x[nld:2*nld] - A @ x[:nld] - B @ u[:nsd])
 
         for t in range(1, nts-1):
             df[t*nld:(t+1)*nld] += - C.T @ y[t*nn:(t+1)*nn] \
-                                     + C.T @ np.exp(C @ x[t*nld:(t+1)*nld] + d) \
-                                  - ATQinv @ x[(t+1)*nld:(t+2)*nld] \
-                                  + ATQinvA @ x[t*nld:(t+1)*nld] \
-                                  + ATQinvB @ u[t*nsd:(t+1)*nsd] \
-                                  + Qinv @ x[t*nld:(t+1)*nld] \
-                                  - QinvA @ x[(t-1)*nld:t*nld] \
-                                  - QinvB @ u[(t-1)*nsd:t*nsd]
+                                   + C.T @ np.exp(C @ x[t*nld:(t+1)*nld] + d) \
+                                   - ATQinv @ x[(t+1)*nld:(t+2)*nld] \
+                                   + ATQinvA @ x[t*nld:(t+1)*nld] \
+                                   + ATQinvB @ u[t*nsd:(t+1)*nsd] \
+                                   + Qinv @ x[t*nld:(t+1)*nld] \
+                                   - QinvA @ x[(t-1)*nld:t*nld] \
+                                - QinvB @ u[(t-1)*nsd:t*nsd]
 
-        df[-nld:] += - C.T @ y[-nn:] + C.T @ np.exp(C @ x[-nld:] + d) \
-                    + Qinv @ (x[-nld:] - A @ x[-2*nld:-nld] - B @ u[-2*nsd:-nsd])
+        df[-nld:] += - C.T @ y[-nn:] + C.T @ np.exp(C @ x[-nld:] + d) + Qinv @ (x[-nld:] - A @ x[-2*nld:-nld] - B @ u[-2*nsd:-nsd])
 
         return df
-    return f
+    return flpg
 
 
 def logposteriorhessian(C, d, A, Q, Q0, nts, nn, nld):
@@ -81,50 +95,45 @@ def logposteriorhessian(C, d, A, Q, Q0, nts, nn, nld):
     ATQinvA = A.T @ Qinv @ A
     ATQinvAplusQinv = ATQinvA + Qinv
     ATQinv = A.T @ Qinv
-
-    @profile
-    def f(x):
-
+    
+    def flph(x, mode='sparse'):
         diag = []
         off_diag = []
-        diag.append(scsp.lil_matrix(Q0inv + ATQinvA + sum(np.exp(C[i] @ x[:nld] + d[i]) * np.outer(C[i], C[i].T)
-                                          for i in range(nn))))
+        diag.append(Q0inv + ATQinvA + sum(np.exp(C[i] @ x[:nld] + d[i]) * np.outer(C[i], C[i].T)
+                                          for i in range(nn)))
         for t in range(1, nts-1):
-            diag.append(scsp.lil_matrix(sum(np.exp(C[i] @ x[t*nld:(t+1)*nld] + d[i]) * np.outer(C[i], C[i].T)
-                                          for i in range(nn)) + ATQinvAplusQinv))
-        diag.append(scsp.lil_matrix(sum(np.exp(C[i] @ x[-nld:] + d[i]) * np.outer(C[i], C[i].T)
-                                          for i in range(nn)) + Qinv))
+            diag.append(sum(np.exp(C[i] @ x[t*nld:(t+1)*nld] + d[i]) * np.outer(C[i], C[i].T)
+                                          for i in range(nn)) + ATQinvAplusQinv)
+        diag.append(sum(np.exp(C[i] @ x[-nld:] + d[i]) * np.outer(C[i], C[i].T)
+                                          for i in range(nn)) + Qinv)
 
         for t in range(0, nts-1):
-            off_diag.append(scsp.lil_matrix(-ATQinv))
-
-        h = scsp.block_diag(diag).tolil()
-        od = scsp.block_diag(off_diag).tolil()
-
-        h[:-nld, nld:] += od
-        h[nld:, :-nld] += od.T
-
-        return h.tocsc()
-    return f
+            off_diag.append(-ATQinv)
+            
+        if mode=='asblocks':
+            return diag, off_diag
+        else:
+            h = blocktridiag(diag, off_diag, [el.T for el in off_diag])
+            return h
+    return flph
 
 
 def jointloglikelihood(nld, nn, nts, mu, covd, y):
-    @profile
-    def f(dC):
+
+    def fjll(dC):
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
 
-        jll = sum(-y[t*nn:(t+1)*nn] @ C @ mu[t*nld:(t+1)*nld] - y[t*nn:(t+1)*nn] @ d \
+        jll = sum(-y[t*nn:(t+1)*nn] @ C @ mu[t*nld:(t+1)*nld] - y[t*nn:(t+1)*nn] @ d
                   + sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + .5 * (C[i] @ covd[t] @ C[i]) +
                     d[i]) for i in range(nn)) for t in range(nts-1)) + .5 * .1 * np.sum(C**2) + .1 * np.sum(np.abs(C))
         return jll
-    return f
+    return fjll
 
 
 def jllDerivative(nn, nld, mu, covd, nts, y):
-    @profile
-    def f(dC):
-        print(nld)
+
+    def fjllg(dC):
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
 
@@ -134,8 +143,8 @@ def jllDerivative(nn, nld, mu, covd, nts, y):
                            np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i]))
                            for t in range(nts-1))
 
-        djllC = [sum(-y[t*nn+i] * mu[t*nld:(t+1)*nld] + \
-                     np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) * \
+        djllC = [sum(-y[t*nn+i] * mu[t*nld:(t+1)*nld] + 
+                     np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) * 
                      (mu[t*nld:(t+1)*nld] + covd[t] @ C[i])
                      for t in range(nts-1)) for i in range(nn)]
 
@@ -145,12 +154,12 @@ def jllDerivative(nn, nld, mu, covd, nts, y):
             djlldC[i*(nld+1) + 1:(i+1)*(nld+1)] = djllC[i] + .1 * np.sign(C[i]) + .1 * C[i]
 
         return djlldC
-    return f
+    return fjllg
 
 
 def jllHessian(nn, nld, mu, covd, nts):
-    @profile
-    def f(dC):
+
+    def fjllh(dC):
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
 
@@ -160,13 +169,13 @@ def jllHessian(nn, nld, mu, covd, nts):
             block = .1 * np.identity(1 + nld)
             block[0, 0] = sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) for t in range(nts-1))
 
-            block[0, 1:] += sum((mu[t*nld:(t+1)*nld] + covd[t] @ C[i]) * np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + \
+            block[0, 1:] += sum((mu[t*nld:(t+1)*nld] + covd[t] @ C[i]) * np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + 
                     .5 * (C[i] @ covd[t] @ C[i])) for t in range(nts-1))
 
             block[1:, 0] += block[0, 1:]
 
             block[1:, 1:] += sum((covd[t] +
-                np.outer(mu[t*nld:(t+1)*nld] + covd[t] @ C[i], (mu[t*nld:(t+1)*nld] + covd[t] @ C[i]).T))*\
+                np.outer(mu[t*nld:(t+1)*nld] + covd[t] @ C[i], (mu[t*nld:(t+1)*nld] + covd[t] @ C[i]).T)) *
                 np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i]))
                 for t in range(nts-1))
 
@@ -174,22 +183,24 @@ def jllHessian(nn, nld, mu, covd, nts):
 
         HJLL = scsp.block_diag(blocks)
         return HJLL.tocsc()
-    return f
+    return fjllh
 
-@profile
-def computecov(h, nld, nts):
+
+def computecov(diag, offdiag, nld, nts):
+    print('computing covariance')
     # compute U
     Udiag = list(range(nts))
     Uoff = list(range(nts-1))
-    Udiag[0] = np.linalg.cholesky(h[:nld, :nld]).T
-    for t in range(1, nts):  # t goes from 1 to nts-1
-        Uoff[t-1] = np.linalg.inv(Udiag[t-1].T) @ h[(t-1)*nld:t*nld, t*nld:(t+1)*nld]
-        Udiag[t] = np.linalg.cholesky(h[t*nld:(t+1)*nld, t*nld:(t+1)*nld] - Uoff[t-1].T @ Uoff[t-1]).T
+    
+    # Udiag[0] = np.linalg.cholesky(h[:nld, :nld]).T
+    # for t in range(1, nts):
+    #     Uoff[t-1] = np.linalg.inv(Udiag[t-1].T) @ h[(t-1)*nld:t*nld, t*nld:(t+1)*nld]
+    #     Udiag[t] = np.linalg.cholesky(h[t*nld:(t+1)*nld, t*nld:(t+1)*nld] - Uoff[t-1].T @ Uoff[t-1]).T
 
-    # Udiag[0] = np.linalg.cholesky(hdiag[0]).T
-    # for t in range(1, nts):  # t goes from 1 to nts-1
-    #     Uoff[t-1] = np.linalg.inv(Udiag[t-1].T) @ hoffdiag[t]
-    #     Udiag[t] = np.linalg.cholesky(hdiag[t] - Uoff[t-1].T @ Uoff[t-1]).T
+    Udiag[0] = np.linalg.cholesky(diag[0]).T
+    for t in range(1, nts): 
+        Uoff[t-1] = np.linalg.inv(Udiag[t-1].T) @ offdiag[t-1]
+        Udiag[t] = np.linalg.cholesky(diag[t] - Uoff[t-1].T @ Uoff[t-1]).T
 
     covdiag = list(range(nts))
     covoff = list(range(nts-1))
@@ -201,10 +212,11 @@ def computecov(h, nld, nts):
 
     return covdiag, covoff
 
-@profile
+
 def laplace_approximation(f, df, hf, x, nts, nld):
     # use NR algorithm to compute minimum of log-likelihood
     x = nr_algo(f, df, hf, x)
-    covdiag, covoffdiag = computecov(hf(x).toarray(), nld, nts)
+    covdiag, covoffdiag = computecov(*hf(x, mode='asblocks'), nld, nts)
     return x, covdiag, covoffdiag
+
 

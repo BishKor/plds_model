@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.sparse.linalg as splin
-
+# from memory_profiler import profile
 
 def nr_step(f, df, H, x, fold, mode='sparse', alpha=.0001, tolx=.0001, stpmax=1000):
     """
@@ -12,11 +12,7 @@ def nr_step(f, df, H, x, fold, mode='sparse', alpha=.0001, tolx=.0001, stpmax=10
     :param fold: past iteration value of f
     :return: xnew, fnew: updated version of x, f(xnew)
     """
-
-    if mode == 'sparse':
-        newton_dir = splin.spsolve(H, -df)
-    elif mode == 'dense':
-        newton_dir = np.linalg.solve(H, -df)
+    newton_dir = splin.spsolve(H, -df)
 
     if np.linalg.norm(newton_dir) > stpmax:
         print("rescaling newton direction")

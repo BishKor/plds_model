@@ -5,22 +5,21 @@ import numpy as np
 from newton_method import nr_algo
 import pickle
 import datetime
-from memory_profiler import profile
+# from memory_profiler import profile
+import argparse
 
-
-@profile
 def runmodel(y, u, nts, nn, nld, nsd):
     print('variable initialization')
     # Initialize parameters to random values
-    C = np.random.rand(nn, nld) * 0.
-    d = np.random.rand(nn) * .0
+    C = np.random.rand(nn, nld) * .1
+    d = np.random.rand(nn) * .1
     m0 = np.random.rand(nld)
-    A = np.random.rand(nld, nld) * 0.
+    A = np.random.rand(nld, nld) * .01
     Q0 = np.random.rand(nld, nld)
     Q0 = Q0 @ Q0.T
     Q = np.random.rand(nld, nld)
     Q = Q @ Q.T
-    B = np.random.rand(nld, nsd) * 0.
+    B = np.random.rand(nld, nsd) * .01
     mu = np.random.rand(nld*nts)
 
     previoustheta = np.concatenate([A.flatten(), B.flatten(), C.flatten(), d, Q.flatten(), Q0.flatten(), m0])
@@ -47,7 +46,7 @@ def runmodel(y, u, nts, nn, nld, nsd):
             B @ np.outer(u[t*nsd:(t+1)*nsd], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)) @ \
             np.linalg.inv(sum(covd[t] + np.outer(mu[t*nld:(t+1)*nld], mu[t*nld:(t+1)*nld].T) for t in range(nts - 1)))
 
-        B = sum(np.outer(mu[(t+1)*nld:(t+2)*nld], u[t*nsd:(t+1)*nsd]) - \
+        B = sum(np.outer(mu[(t+1)*nld:(t+2)*nld], u[t*nsd:(t+1)*nsd]) - 
                 A @ np.outer(mu[t*nld:(t+1)*nld], u[t*nsd:(t+1)*nsd])
                 for t in range(nts-1)) @ np.linalg.inv(sum(np.outer(u[t*nsd:(t+1)*nsd], u[t*nsd:(t+1)*nsd].T)
                                                            for t in range(nts-1)))
@@ -61,11 +60,11 @@ def runmodel(y, u, nts, nn, nld, nsd):
         print('performing NR algorithm for parameters C, d')
         # need to vectorize C for the purpose of gradient descent, thus making a vector (d[i], C[i]), i.e. hessian for
         # each neuron
+
         dC = nr_algo(jointloglikelihood(nld, nn, nts, mu, covd, y),
                      jllDerivative(nn, nld, mu, covd, nts, y),
                      jllHessian(nn, nld, mu, covd, nts),
                      np.insert(C, 0, d, axis=1).flatten())
-
         for i in range(nn):
             d[i] = dC[i*(nld+1)]
             C[i] = dC[i*(nld+1) + 1:(i+1)*(nld+1)]
@@ -81,11 +80,9 @@ def runmodel(y, u, nts, nn, nld, nsd):
     return {'A': A, 'B': B, 'C': C, 'd': d, 'm0': m0, 'Q': Q, 'Q0': Q0, 'x': mu}
 
 
-def load_data():
-    nld = 2
+def load_data(nts):
     nn = 300
     nsd = 4
-    nts = 1000
     data = scio.loadmat('../data/compiled_dF033016.mat')
     frameHz = data['FrameRateHz'][0, 0]  # frames per seconds
     y = data['behavdF'].T
@@ -106,13 +103,20 @@ def load_data():
         for frame in np.arange(onf, off, dtype=np.int32):
             u[frame] = np.array([ori*loc, (1-ori)*loc, ori*(1-loc), (1-ori)*(1-loc)])
 
-    return y.flatten()[:nts*nn], u.flatten()[:nts*nsd], nts, nn, nld, nsd
+    return y.flatten()[:nts*nn], u.flatten()[:nts*nsd], nn, nsd
 
 
 if __name__ == "__main__":
+    # parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("nld")
+    parser.add_argument("nts")
+    args = parser.parse_args()
+    nld = int(args.nld)
+    nts = int(args.nts)
     # load data
     print('loading data')
-    y, u, nts, nn, nld, nsd = load_data()
+    y, u, nn, nsd = load_data(nts)
     print('running model')
     output = runmodel(y, u, nts, nn, nld, nsd)
     now = datetime.datetime.now()
