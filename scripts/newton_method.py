@@ -2,7 +2,7 @@ import numpy as np
 import scipy.sparse.linalg as splin
 # from memory_profiler import profile
 
-def nr_step(f, df, H, x, fold, mode='sparse', alpha=.0001, tolx=.0001, stpmax=1000):
+def nr_step(f, df, H, x, fold, alpha=1.0): #, tolx=.0001, stpmax=1000):
     """
     Performs a single Newton-Raphson step
     :param f: incoming function, receives x as input
@@ -13,63 +13,33 @@ def nr_step(f, df, H, x, fold, mode='sparse', alpha=.0001, tolx=.0001, stpmax=10
     :return: xnew, fnew: updated version of x, f(xnew)
     """
     newton_dir = splin.spsolve(H, -df)
+    xnew = x + alpha * newton_dir
+    fnew = f(xnew)
+    if np.abs(fold - fnew) < .00001 and np.sum(np.abs(newton_dir)) < .00001:
+        return xnew, fnew, True
+    else:
+        return xnew, fnew, False
 
-    if np.linalg.norm(newton_dir) > stpmax:
-        print("rescaling newton direction")
-        newton_dir = stpmax * newton_dir / np.linalg.norm(newton_dir)
 
-    slope = df @ newton_dir
-    # if slope > 0.0:
-    #     print('Roundoff problem in nr_step')
-    #     sys.exit()
-
-    test = 0.
-    for d in range(len(x)):
-        tmp = np.abs(newton_dir[d])/max(np.abs(x[d]), 1)
-        if tmp > test:
-            test = tmp
-
-    if test < 1e-12:
-        return x, fold, True
-
-    alamin = tolx/test
-
-    lam = 1.0
-
-    while True:
-        xnew = x + lam * newton_dir
+def nr_step_with_backtracking(f, df, H, x, fold, alpha=.25, beta=.7):
+    newton_dir = splin.spsolve(H, -df)
+    t = 1.0
+    xnew = x + t * newton_dir
+    fnew = f(xnew)
+    keepsearching = (fnew > fold + alpha * t * df @ newton_dir)
+    while keepsearching:
+        t *= beta
+        xnew = x + t * newton_dir
         fnew = f(xnew)
+        keepsearching = (fnew > fold + alpha * t * df @ newton_dir)
 
-        if lam < alamin:
-            return x, fold, True
-        elif fnew <= fold + alpha * lam * slope:
-            return xnew, fnew, False
-        else:
-            if lam == 1.0:
-                tmplam = - .5 * slope / (fnew - fold - slope)
-            else:
-                rhs1 = fnew - fold - lam * slope
-                rhs2 = f2 - fold - lam2 * slope
-                a = (rhs1/(lam*lam)-rhs2/(lam2*lam2))/(lam-lam2)
-                b = (-lam2*rhs1/(lam*lam) + lam*rhs2/(lam2*lam2))/(lam-lam2)
-                if a == 0.0:
-                    tmplam = -slope/(2.0*b)
-                else:
-                    disc = b*b-3.0*a*slope
-                    if disc < 0.0:
-                        tmplam = .5*lam
-                    elif b <= 0.0:
-                        tmplam = (-b + np.sqrt(disc))/(3.0 * a)
-                    else:
-                        tmplam = -slope/(b+np.sqrt(disc))
-                if tmplam > .5 * lam:
-                    tmplam = .5 * lam
-        lam2 = 1. * lam
-        f2 = 1. * fnew
-        lam = max(tmplam, .1*lam)
+    if np.abs(fold - fnew) < .00001 and np.sum(np.abs(newton_dir)) < .00001:
+        return xnew, fnew, True
+    else:
+        return xnew, fnew, False
 
 
-def nr_algo(f, df, h, x, mode='sparse'):
+def nr_algo(f, df, h, x, maxiter=5, thresholditer=10, mode='simple'):
     """
     Performs the Newton-Raphson optimization method
     :param f: function to be optimized
@@ -79,23 +49,32 @@ def nr_algo(f, df, h, x, mode='sparse'):
     :param threshold: cutoff value, improvements smaller that this value are inconsequential
     :return: location of optimum
     """
-    TOLMIN = 1e-12
     fold = f(x)
     cont = True
     iter = 0
-    while cont:
-        iter += 1
-        x, fnew, check = nr_step(f, df(x), h(x), x, fold, mode=mode)
-        # check for convergence on function values
-        # I'm not sure how this should be implemented
-        # check for grad of f zero , i.e., spurious convergence
-        if check:
-            test = np.max(np.abs(df(x)) * np.maximum(np.abs(x), 1)/max(f(x), 1))
-            check = test < TOLMIN
-            cont = False
-        else:
-            fold = 1. * fnew
-    return x
+    if mode == 'simple':
+        al = 1.0
+        while cont:
+            x, fnew, check = nr_step(f, df(x), h(x), x.copy(), fold, alpha=al)
+            print('fold = {} diff = {}'.format(fnew, fold - fnew))
+            iter += 1
+            if iter > thresholditer:
+                al *= .5
+            if check or iter > maxiter:
+                cont = False
+            else:
+                fold = 1. * fnew
+        return x
+    elif mode == 'backtracking':
+        while cont:
+            x, fnew, check = nr_step_with_backtracking(f, df(x), h(x), x.copy(), fold)
+            print('fold = {} diff = {}'.format(fnew, fold - fnew))
+            iter += 1
+            if check or iter > maxiter:
+                cont = False
+            else:
+                fold = 1. * fnew
+        return x
 
 
 if __name__ == "__main__":
@@ -108,7 +87,7 @@ if __name__ == "__main__":
     def testhf(x):
         return np.array([[-2-40*x[1] - 120*x[0]**2, -40*x[0]], [-40*x[0], 20]])
 
-    y = np.array([1, 1])
+    y = np.array([10, 10])
     print("initial guess = ", y)
     y = nr_algo(testf, testdf, testhf, y)
     print("final estimate = ", y)

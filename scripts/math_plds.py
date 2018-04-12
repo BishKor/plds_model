@@ -55,7 +55,7 @@ def logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld):
                          @ Qinv @
                          (x[(t+1)*nld:(t+2)*nld] - A @ x[t*nld:(t+1)*nld] - B @ u[t*nsd:(t+1)*nsd])
                          for t in range(nts-1))
-        return -lptotal
+        return lptotal
     return flp
 
 
@@ -119,46 +119,42 @@ def logposteriorhessian(C, d, A, Q, Q0, nts, nn, nld):
 
 
 def jointloglikelihood(nld, nn, nts, mu, covd, y):
-
     def fjll(dC):
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
 
         jll = sum(-y[t*nn:(t+1)*nn] @ C @ mu[t*nld:(t+1)*nld] - y[t*nn:(t+1)*nn] @ d
                   + sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + .5 * (C[i] @ covd[t] @ C[i]) +
-                    d[i]) for i in range(nn)) for t in range(nts-1)) + .5 * .1 * np.sum(C**2) + .1 * np.sum(np.abs(C))
+                    d[i]) for i in range(nn)) for t in range(nts-1)) # + .5 * .1 * np.sum(C**2) + .1 * np.sum(np.abs(C))
+        
         return jll
     return fjll
 
 
 def jllDerivative(nn, nld, mu, covd, nts, y):
-
     def fjllg(dC):
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
 
         djlld = np.zeros(nn)
         for i in range(nn):
-            djlld[i] = sum(-y[t*nn+i] +
-                           np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i]))
-                           for t in range(nts-1))
-
+            djlld[i] += sum(-y[t*nn+i] + np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) for t in range(nts-1))
+        
         djllC = [sum(-y[t*nn+i] * mu[t*nld:(t+1)*nld] + 
                      np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) * 
                      (mu[t*nld:(t+1)*nld] + covd[t] @ C[i])
                      for t in range(nts-1)) for i in range(nn)]
 
-        djlldC = np.empty(nn*(nld+1))
+        djlldC = np.zeros(nn*(nld+1))
         for i in range(nn):
-            djlldC[i*(nld+1)] = djlld[i]
-            djlldC[i*(nld+1) + 1:(i+1)*(nld+1)] = djllC[i] + .1 * np.sign(C[i]) + .1 * C[i]
+            djlldC[i*(nld+1)] += djlld[i]
+            djlldC[i*(nld+1) + 1:(i+1)*(nld+1)] += djllC[i] # + .1 * np.sign(C[i]) + .1 * C[i]
 
         return djlldC
     return fjllg
 
 
 def jllHessian(nn, nld, mu, covd, nts):
-
     def fjllh(dC):
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
@@ -166,8 +162,8 @@ def jllHessian(nn, nld, mu, covd, nts):
         blocks = []
 
         for i in range(nn):
-            block = .1 * np.identity(1 + nld)
-            block[0, 0] = sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) for t in range(nts-1))
+            block = .0 * np.identity(1 + nld)
+            block[0, 0] += sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) for t in range(nts-1))
 
             block[0, 1:] += sum((mu[t*nld:(t+1)*nld] + covd[t] @ C[i]) * np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + 
                     .5 * (C[i] @ covd[t] @ C[i])) for t in range(nts-1))
@@ -184,7 +180,6 @@ def jllHessian(nn, nld, mu, covd, nts):
         HJLL = scsp.block_diag(blocks)
         return HJLL.tocsc()
     return fjllh
-
 
 def computecov(diag, offdiag, nld, nts):
     print('computing covariance')
@@ -213,10 +208,47 @@ def computecov(diag, offdiag, nld, nts):
     return covdiag, covoff
 
 
-def laplace_approximation(f, df, hf, x, nts, nld):
+def laplace_approximation(f, df, hf, x0, nts, nld, nrmode='simple'):
     # use NR algorithm to compute minimum of log-likelihood
-    x = nr_algo(f, df, hf, x)
+    x = nr_algo(f, df, hf, x0, mode=nrmode)
     covdiag, covoffdiag = computecov(*hf(x, mode='asblocks'), nld, nts)
     return x, covdiag, covoffdiag
 
 
+def Cjointloglikelihood(nld, nn, nts, mu, covd, y, d):
+    def fjll(dC):
+        C = np.array([dC[i*nld:(i+1)*nld] for i in range(nn)])
+
+        jll = sum(-y[t*nn:(t+1)*nn] @ C @ mu[t*nld:(t+1)*nld] - y[t*nn:(t+1)*nn] @ d
+                  + sum(np.exp(C[i] @ mu[t*nld:(t+1)*nld] + .5 * (C[i] @ covd[t] @ C[i]) +
+                    d[i]) for i in range(nn)) for t in range(nts-1)) # + .5 * .1 * np.sum(C**2) + .1 * np.sum(np.abs(C))
+        return jll 
+    return fjll
+
+
+def CjllDerivative(nn, nld, mu, covd, nts, y, d):
+    def fjllg(dC):
+        C = np.array([dC[i*nld:(i+1)*nld] for i in range(nn)])
+
+        djllC = [sum(-y[t*nn+i] * mu[t*nld:(t+1)*nld] + 
+                     np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i])) * 
+                     (mu[t*nld:(t+1)*nld] + covd[t] @ C[i])
+                     # + .1 * np.sign(C[i]) + .1 * C[i]
+                     for t in range(nts-1)) for i in range(nn)]
+        return np.concatenate(djllC)
+    return fjllg
+
+
+def CjllHessian(nn, nld, mu, covd, nts, d):
+    def fjllh(dC):
+        C = np.array([dC[i*nld:(i+1)*nld] for i in range(nn)])
+        
+        blocks = []
+        for i in range(nn):
+            block = sum((covd[t] + np.outer(mu[t*nld:(t+1)*nld] + covd[t] @ C[i], (mu[t*nld:(t+1)*nld] + covd[t] @ C[i]).T)) *
+                np.exp(C[i] @ mu[t*nld:(t+1)*nld] + d[i] + .5 * (C[i] @ covd[t] @ C[i]))
+                for t in range(nts-1)) # + .1 * np.identity(nld)
+            blocks.append(scsp.lil_matrix(block))
+        HJLL = scsp.block_diag(blocks)
+        return HJLL.tocsc()
+    return fjllh
