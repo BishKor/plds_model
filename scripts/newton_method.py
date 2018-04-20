@@ -39,7 +39,7 @@ def nr_step_with_backtracking(f, df, H, x, fold, alpha=.25, beta=.7):
         return xnew, fnew, False
 
 
-def nr_algo(f, df, h, x, maxiter=5, thresholditer=10, mode='simple'):
+def nr_algo(f, df, h, x, maxiter=30, thresholditer=10, mode='simple'):
     """
     Performs the Newton-Raphson optimization method
     :param f: function to be optimized
@@ -56,7 +56,7 @@ def nr_algo(f, df, h, x, maxiter=5, thresholditer=10, mode='simple'):
         al = 1.0
         while cont:
             x, fnew, check = nr_step(f, df(x), h(x), x.copy(), fold, alpha=al)
-            print('fold = {} diff = {}'.format(fnew, fold - fnew))
+            print('fold = {} diff = {}'.format(fnew, fold - fnew), flush=True)
             iter += 1
             if iter > thresholditer:
                 al *= .5
@@ -68,7 +68,7 @@ def nr_algo(f, df, h, x, maxiter=5, thresholditer=10, mode='simple'):
     elif mode == 'backtracking':
         while cont:
             x, fnew, check = nr_step_with_backtracking(f, df(x), h(x), x.copy(), fold)
-            print('fold = {} diff = {}'.format(fnew, fold - fnew))
+            print('fold = {} diff = {}'.format(fnew, fold - fnew), flush=True)
             iter += 1
             if check or iter > maxiter:
                 cont = False

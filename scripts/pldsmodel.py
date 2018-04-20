@@ -23,9 +23,9 @@ def runmodel(rundirpath, nld, y, u, nn, nsd, nts, onsettimes, offsettimes,
     print('variable initialization')
     # Initialize parameters to random values
     
-    A = Ainit if Ainit else np.zeros((nld, nld))
+    A = Ainit if Ainit is not None else np.zeros((nld, nld))
     
-    if Binit:
+    if Binit is not None:
         B = Binit
     else:
         B = np.zeros((nld, nsd))
@@ -34,9 +34,9 @@ def runmodel(rundirpath, nld, y, u, nn, nsd, nts, onsettimes, offsettimes,
         else:
             B[:,:nld] += np.identity(nld)
     
-    C = C_init if Cinit else ((np.std(np.log(y + .0001), axis=0) / np.sqrt(nld)) * np.random.randn(nld, nn)).T
+    C = Cinit if Cinit is not None else ((np.std(np.log(y + .0001), axis=0) / np.sqrt(nld)) * np.random.randn(nld, nn)).T
     
-    if dinit:
+    if dinit is not None:
         d = dinit
     else:
         ysilent = []
@@ -46,10 +46,10 @@ def runmodel(rundirpath, nld, y, u, nn, nsd, nts, onsettimes, offsettimes,
                 ysilent.append(yvec[t-i])
         d = np.log(np.mean(ysilent, axis=0))
         
-    Q = Qinit if Qinit else np.identity(nld) * .1
-    Q0 = Q0init if Q0init else np.identity(nld) * .1
-    m0 = m0init if m0init else np.zeros(nld)
-    mu = muinit if muinit else np.array([B @ u[t*nsd:(t+1)*nsd] + Q @ np.random.rand(nld) for t in range(nts)]).flatten()
+    Q = Qinit if Qinit is not None else np.identity(nld) * .1
+    Q0 = Q0init if Q0init is not None else np.identity(nld) * .1
+    m0 = m0init if m0init is not None else np.zeros(nld)
+    mu = muinit if muinit is not None else np.array([B @ u[t*nsd:(t+1)*nsd] + Q @ np.random.rand(nld) for t in range(nts)]).flatten()
     
     covd, covod = computecov(*logposteriorhessian(C, d, A, Q, Q0, nts, nn, nld)(mu, mode='asblocks'), nld, nts)
     output = {'nld': nld, 'nts': nts, 'nn': nn, 'nsd': nsd,
@@ -70,12 +70,12 @@ def runmodel(rundirpath, nld, y, u, nn, nsd, nts, onsettimes, offsettimes,
         # perform laplace approximation on log-posterior with Newton-Raphson optimization to find mean and covariance
         # covd is covariance diagonal blocks. (nld, nld*nts)
         # covod is covariance off diabonal blocks. (nld, nld*(nts-1))
-        print('Performing Laplace approximation')
+        print('Performing Laplace approximation', flush=True)
         
         mu, covd, covod = laplace_approximation(logposterior(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld),
                                                 logposteriorderivative(y, C, d, A, B, Q, Q0, m0, u, nts, nn, nsd, nld),
                                                 logposteriorhessian(C, d, A, Q, Q0, nts, nn, nld),
-                                                mu.copy(), nts, nld)
+                                                mu.copy(), nts, nld, nrmode='backtracking')
 
         print('Assigning analytic expressions')
         # Use analytic expressions to compute parameters m0, Q, Q0, A, B
@@ -103,8 +103,7 @@ def runmodel(rundirpath, nld, y, u, nn, nsd, nts, onsettimes, offsettimes,
                      jllDerivative(nn, nld, mu, covd, nts, y),
                      jllHessian(nn, nld, mu, covd, nts),
                      np.insert(C, 0, d, axis=1).flatten(),
-                     maxiter=20,
-                     mode='simple')
+                     mode='backtracking')
         
         d = dC[::nld+1]
         C = np.array([dC[i*(nld+1)+1:(i+1)*(nld+1)] for i in range(nn)])
@@ -154,18 +153,19 @@ def load_data(datapath, nts, initpath=None):
     data = pickle.load(open(datapath, 'rb'))
     if nts == None:
         nts = data['nts']
-        
+
+    onsetimes = data['onsetframes'][data['onsetframes'] <= nts]
+    offsettimes = data['offsetframes'][data['offsetframes'] <= nts]
+
     if initpath == None:
-        onsetimes = data['onsetframes'][data['onsetframes'] <= nts]
-        offsettimes = data['offsetframes'][data['offsetframes'] <= nts]
         return data['y'][:nts].flatten(), data['u'][:nts].flatten(), data['nn'], data['nsd'], nts, onsetimes, offsettimes
     else:
         if datapath == initpath:
             initdata = data
         else:
             initdata = pickle.load(open(initpath, 'rb'))
-        
-        return initdata['nld'], data['y'][:nts].flatten(), data['u'][:nts].flatten(), data['nn'], data['nsd'], nts, onsetimes, offsettimes, initdata['A'][-1], initdata['B'][-1], initdata['C'][-1], initdata['d'][-1], initdata['Q'][-1], initdata['Q0'][-1], initdata['m0'][-1], initdata['mu'][-1]
+
+        return initdata['nld'], data['y'][:nts].flatten(), data['u'][:nts].flatten(), data['nn'], data['nsd'], nts, onsetimes, offsettimes, initdata['A'][-1], initdata['B'][-1], initdata['C'][-1], initdata['d'][-1], initdata['Q'][-1], initdata['Q0'][-1], initdata['m0'][-1], initdata['x'][-1]
 
 
 if __name__ == "__main__":
@@ -178,7 +178,7 @@ if __name__ == "__main__":
         args[arg.split('=')[0]] = arg.split('=')[1]
     now = datetime.datetime.now()
     # d_ln(<ysilent>)
-    rundirpath = "../runs/{}_nld={}_plds_{}-{}-{}-{}-{}-{}".format(args['datapath'].split('/')[-1], args['nld'], now.year, now.month, now.day, now.hour, now.minute, now.second)
+    rundirpath = "../runs/{}_nld_{}_plds_{}-{}-{}-{}-{}-{}".format(args['datapath'].split('/')[-1], args['nld'], now.year, now.month, now.day, now.hour, now.minute, now.second)
     os.makedirs(rundirpath)
     
     if 'initpath' in args.keys():
