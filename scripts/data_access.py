@@ -5,7 +5,7 @@ import pickle
 from math import floor, ceil
 
 class dataset():
-    def __init__(self, mode='standard', latentvarpath=None):
+    def __init__(self, mode='standard', target='stimuli', latentvarpath=None):
         
         self.data = scio.loadmat('../data/compiled_dF033016.mat')
         
@@ -33,18 +33,17 @@ class dataset():
         self.location = np.array((self.data['location'][0] + 1) // 2, np.int8)
 
         # make a list of targets (stimuli)
-        # self.stimuli = 1 * (1 - self.orientation) * self.location + 2 * self.orientation * (1 - self.location) + 3 * (1 - self.orientation) * (1 - self.location)
-        # self.stimuli = self.orientation
-        self.stimuli = self.location.copy()
-        # print(self.stimuli)
+        if target == 'stimuli':
+            self.stimuli = 1 * (1 - self.orientation) * self.location + \
+                           2 * self.orientation * (1 - self.location) + \
+                           3 * (1 - self.orientation) * (1 - self.location)
+        elif target == 'orientation':
+            self.stimuli = self.orientation.copy()
+        elif target == 'location':
+            self.stimuli = self.location.copy()
+
         self.delaytimes = np.insert(self.onsetframe[1:], len(self.onsetframe)-1, self.y.shape[0]) - self.offsetframe
 
-#         shuffledindices = np.random.permutation(self.stimuli.shape[0])
-#         self.batchsize = int(.8 * self.stimuli.shape[0])
-#         self.testtrialindices = shuffledindices[:self.batchsize]
-#         self.traintrialindices = shuffledindices[self.batchsize:]
-
-    
     def gettrials(self, traintime, testtime, span=1):
         # generate list of indices of trials whose following trial begins in time larger than delay time plus span time
         trainindices = []
@@ -94,54 +93,6 @@ class dataset():
             if t >= time + span - 1:
                 nvalids += 1
         return nvalids
-        
-
-#     def gettraintrialsattime(self, time, span):
-#         # generate list of indices of trials whose following trial begins in time larger that delay time plus span time
-#         filteredindices = []
-#         for i, t in enumerate(self.delaytimes):
-#             if t >= time - 10 + span:
-#                 filteredindices.append(i)
-
-#         # make a list of inputs (ca2data) with only data that is N time steps before and after stimuli offset
-#         traintrials = []
-#         trainstims = []
-#         for i in filteredindices:
-#             if np.isin(i, self.traintrialindices):
-#                 for s in range(span):
-#                     traintrials.append(list(self.y[self.offsetframe[i] - 10 + time + s]))
-#                     trainstims.append(self.stimuli[i])
-        
-#         return np.array(traintrials), np.array(trainstims)
     
-        
-#     def gettesttrialsattime(self, time, span):
-#         # generate list of indices of trials whose following trial begins in time larger that delay time plus span time
-#         filteredindices = []
-#         for i, t in enumerate(self.delaytimes):
-#             if t >= time - 10 + span:
-#                 filteredindices.append(i)
-
-#         # make a list of inputs (ca2data) with only data that is N time steps before and after stimuli offset
-#         testtrials = []
-#         teststims = []
-#         for i in filteredindices:
-#             if np.isin(i, self.testtrialindices):
-#                 for s in range(span):
-#                     testtrials.append(list(self.y[self.offsetframe[i] - 10 + time + s]))
-#                     teststims.append(self.stimuli[i])
-                
-#         return np.array(testtrials), np.array(teststims)
-
-    
-#     def trialsoftype(stimtype):
-#         return np.where(self.stimuli == stimtype)
-    
-#     def gettrialaroundoffest(i, tbefore, tafter):
-#         return self.y[self.offsettime[i] - tbefore, tafter]
-        
-        
-#     def shufflesets(self):
-#         shuffledindices = np.random.permutation(self.stimuli.shape[0])
-#         self.testtrialindices = shuffledindices[:self.batchsize]
-#         self.traintrialindices = shuffledindices[self.batchsize:]
+    def as_dict():
+        return {}

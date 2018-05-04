@@ -7,7 +7,8 @@ from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 # for stim, on in zip(stimuli, onsetframe):
 #     normalizedstimgroups[str(stim)].append(ynormalized[int(on - 10): int(on + 10)])
 # normalizedstimgroups = {str(i):np.array(normalizedstimgroups[str(i)]) for i in range(nsd)}
-def getpsth(y, center, stimuli, nn, pre=10, post=40, baselines=None):
+
+def getpsth(y, center, stimuli, nn, nsd, pre=10, post=40, baselines=None):
     ysilent = []
     for t in center:
         for i in range(1, pre):
@@ -36,7 +37,7 @@ def getpsth(y, center, stimuli, nn, pre=10, post=40, baselines=None):
     return psthvectors
 
 
-def getnormalizedpsthstimsortvectors(y, center, stimuli, nn, nsd, baselines, pre=10, post=40):
+def getnormalizedpsthstimsortvectors(y, center, stimuli, nn, nsd, baselines, pre=10, post=40, normalization='max'):
     normalizedstimgroups = {str(i):[] for i in range(nsd)}
     for stim, t in zip(stimuli, center):
         normalizedstimgroups[str(stim)].append(y[int(t - pre): int(t + post)])
@@ -72,8 +73,11 @@ def getnormalizedpsthstimsortvectors(y, center, stimuli, nn, nsd, baselines, pre
                                           psthmeans[stimulilookuptable[psthlocorders[i, 1], psthoriorders[i, 0]]].T[i],                            
                                           psthmeans[stimulilookuptable[psthlocorders[i, 1], psthoriorders[i, 1]]].T[i]                          
                                           ])
-        # normalizedpsthstimsortvectors[i] = psthstimsortvectors[i]/np.max(psthstimsortvectors[i])
-        normalizedpsthstimsortvectors[i] = (psthstimsortvectors[i] - np.mean(psthstimsortvectors[i]))/np.std(psthstimsortvectors[i])
+        if normalization == 'max':
+            normalizedpsthstimsortvectors[i] = psthstimsortvectors[i]/np.max(psthstimsortvectors[i])
+        elif normalization == 'z score':
+            normalizedpsthstimsortvectors[i] = (psthstimsortvectors[i] - np.mean(psthstimsortvectors[i]))/np.std(psthstimsortvectors[i])
+        
     return normalizedpsthstimsortvectors
 
 
@@ -188,3 +192,22 @@ def heirarchicalclustering(y, center, stimuli, nn, nsd, baselines, nclusters=4, 
             for j in range(nsd):
                 plt.plot([pre + j * (pre + post), pre + j * (pre + post)], lims, 'k--')
         plt.show()
+
+        
+def dprimearray(activity, stimuli, center, front=-10, end=40):
+    dprimearray = np.zeros((activity.shape[1], post-pre))
+    for neuronindex, neuron in enumerate(activity.T):
+        for t in range(pre, post):
+            up = []
+            down = []
+            for stimulus, time in zip(stimuli, center):
+                if stimulus == 1:
+                    up.append(neuron[time + t])
+                elif stimulus == -1:
+                    down.append(neuron[time + t])
+            dprimearray[i, t-pre] = dprime(up, down)
+    return dprimearray
+
+
+def dprime(distA, distB):
+    return (np.mean(distA) - np.mean(distB))/np.sqrt(.5 * (np.std(distA)**2 + np.std(distB)**2))
